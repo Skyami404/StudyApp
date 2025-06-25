@@ -1,0 +1,4 @@
+{
+    "firebase.projects": ["StudyApp"],
+    "firebase.useFrameworks": true
+  }
