@@ -1,245 +1,223 @@
-// hooks/useCalendar.js
 import { useState, useEffect } from 'react';
 import * as Calendar from 'expo-calendar';
-import { Platform } from 'react-native';
-import { calendarService } from '../services/calendarService';
+import { Alert } from 'react-native';
 
 export const useCalendar = () => {
-  const [calendarPermission, setCalendarPermission] = useState(null);
-  const [calendars, setCalendars] = useState([]);
-  const [events, setEvents] = useState([]);
+  const [hasPermission, setHasPermission] = useState(false);
   const [freeSlots, setFreeSlots] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedCalendars, setSelectedCalendars] = useState([]);
+  const [calendars, setCalendars] = useState([]);
 
-  // Initialize calendar permissions and data
+  // Request calendar permissions
+  const requestPermissions = async () => {
+    try {
+      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      const hasAccess = status === 'granted';
+      setHasPermission(hasAccess);
+      
+      if (!hasAccess) {
+        Alert.alert(
+          'Calendar Access',
+          'We need calendar access to suggest study times based on your free slots.',
+          [{ text: 'OK' }]
+        );
+      }
+      
+      return hasAccess;
+    } catch (error) {
+      console.error('Failed to request calendar permissions:', error);
+      return false;
+    }
+  };
+
+  // Get available calendars
+  const getCalendars = async () => {
+    try {
+      if (!hasPermission) return [];
+      
+      const availableCalendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      setCalendars(availableCalendars);
+      return availableCalendars;
+    } catch (error) {
+      console.error('Failed to get calendars:', error);
+      return [];
+    }
+  };
+
+  // Get today's events
+  const getTodaysEvents = async () => {
+    try {
+      if (!hasPermission) return [];
+      
+      const today = new Date();
+      const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+      
+      const events = await Calendar.getEventsAsync(
+        calendars.map(cal => cal.id),
+        startOfDay,
+        endOfDay
+      );
+      
+      return events.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    } catch (error) {
+      console.error('Failed to get today\'s events:', error);
+      return [];
+    }
+  };
+
+  // Find free time slots for studying
+  const findFreeSlots = async (minDuration = 25) => {
+    try {
+      setLoading(true);
+      
+      if (!hasPermission) {
+        const granted = await requestPermissions();
+        if (!granted) return [];
+      }
+      
+      // Get today's events
+      const events = await getTodaysEvents();
+      
+      // Define study hours (9 AM to 10 PM)
+      const now = new Date();
+      const studyStart = new Date();
+      studyStart.setHours(9, 0, 0, 0);
+      const studyEnd = new Date();
+      studyEnd.setHours(22, 0, 0, 0);
+      
+      // If it's past study hours, show tomorrow
+      const isAfterStudyHours = now > studyEnd;
+      if (isAfterStudyHours) {
+        studyStart.setDate(studyStart.getDate() + 1);
+        studyEnd.setDate(studyEnd.getDate() + 1);
+      }
+      
+      // Start from current time if today, or study start if tomorrow
+      const searchStart = isAfterStudyHours ? studyStart : 
+        (now > studyStart ? now : studyStart);
+      
+      // Find gaps between events
+      const slots = [];
+      let currentTime = new Date(searchStart);
+      
+      // Add buffer for current time (round up to next 15 minutes)
+      currentTime.setMinutes(Math.ceil(currentTime.getMinutes() / 15) * 15, 0, 0);
+      
+      for (const event of events) {
+        const eventStart = new Date(event.startDate);
+        const eventEnd = new Date(event.endDate);
+        
+        // Skip events outside our study window
+        if (eventEnd <= searchStart || eventStart >= studyEnd) continue;
+        
+        // Check gap before this event
+        if (eventStart > currentTime) {
+          const gapDuration = (eventStart - currentTime) / (1000 * 60); // minutes
+          
+          if (gapDuration >= minDuration) {
+            slots.push({
+              id: `slot_${currentTime.getTime()}`,
+              startTime: new Date(currentTime),
+              endTime: new Date(eventStart),
+              duration: Math.floor(gapDuration),
+              suggestedStudyType: getSuggestedStudyType(gapDuration)
+            });
+          }
+        }
+        
+        // Move current time to after this event
+        if (eventEnd > currentTime) {
+          currentTime = new Date(eventEnd);
+        }
+      }
+      
+      // Check for gap after last event until study end time
+      if (currentTime < studyEnd) {
+        const finalGapDuration = (studyEnd - currentTime) / (1000 * 60);
+        
+        if (finalGapDuration >= minDuration) {
+          slots.push({
+            id: `slot_${currentTime.getTime()}`,
+            startTime: new Date(currentTime),
+            endTime: new Date(studyEnd),
+            duration: Math.floor(finalGapDuration),
+            suggestedStudyType: getSuggestedStudyType(finalGapDuration)
+          });
+        }
+      }
+      
+      setFreeSlots(slots);
+      return slots;
+      
+    } catch (error) {
+      console.error('Failed to find free slots:', error);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Suggest study method based on available time
+  const getSuggestedStudyType = (minutes) => {
+    if (minutes >= 90) return 'deep_work'; // 90 min
+    if (minutes >= 45) return 'focus_block'; // 45 min
+    return 'pomodoro'; // 25 min
+  };
+
+  // Format time slot for display
+  const formatTimeSlot = (slot) => {
+    const startTime = slot.startTime.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    const endTime = slot.endTime.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    return {
+      timeRange: `${startTime} - ${endTime}`,
+      duration: `${slot.duration} min`,
+      suggestion: getStudyTypeLabel(slot.suggestedStudyType)
+    };
+  };
+
+  const getStudyTypeLabel = (type) => {
+    switch (type) {
+      case 'deep_work': return 'Deep Work (90 min)';
+      case 'focus_block': return 'Focus Block (45 min)';
+      case 'pomodoro': return 'Pomodoro (25 min)';
+      default: return 'Quick Study';
+    }
+  };
+
+  // Initialize on mount
   useEffect(() => {
+    const initializeCalendar = async () => {
+      const granted = await requestPermissions();
+      if (granted) {
+        await getCalendars();
+      }
+    };
+    
     initializeCalendar();
   }, []);
 
-  const initializeCalendar = async () => {
-    try {
-      await requestCalendarPermission();
-      if (calendarPermission === 'granted') {
-        await loadCalendars();
-      }
-    } catch (error) {
-      setError('Failed to initialize calendar');
-      console.error('Calendar initialization error:', error);
+  // Refresh free slots when calendars change
+  useEffect(() => {
+    if (calendars.length > 0) {
+      findFreeSlots();
     }
-  };
-
-  const requestCalendarPermission = async () => {
-    try {
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
-      setCalendarPermission(status);
-      
-      if (status !== 'granted') {
-        setError('Calendar permission is required to suggest study times');
-      }
-      
-      return status;
-    } catch (error) {
-      setError('Failed to request calendar permission');
-      console.error('Permission error:', error);
-      return 'denied';
-    }
-  };
-
-  const loadCalendars = async () => {
-    try {
-      setLoading(true);
-      const deviceCalendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-      
-      // Filter to only show calendars we can read from
-      const readableCalendars = deviceCalendars.filter(cal => 
-        cal.allowsModifications !== false && cal.source.name !== 'Local'
-      );
-      
-      setCalendars(readableCalendars);
-      
-      // Auto-select primary calendars
-      const primaryCalendars = readableCalendars.filter(cal => 
-        cal.isPrimary || cal.title.toLowerCase().includes('personal') ||
-        cal.title.toLowerCase().includes('work')
-      );
-      
-      setSelectedCalendars(primaryCalendars.map(cal => cal.id));
-      
-    } catch (error) {
-      setError('Failed to load calendars');
-      console.error('Load calendars error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadEvents = async (startDate, endDate) => {
-    if (!selectedCalendars.length) return [];
-
-    try {
-      setLoading(true);
-      const eventsPromises = selectedCalendars.map(calendarId =>
-        Calendar.getEventsAsync([calendarId], startDate, endDate)
-      );
-      
-      const eventsArrays = await Promise.all(eventsPromises);
-      const allEvents = eventsArrays.flat();
-      
-      // Filter out all-day events and focus on time-specific events
-      const timeEvents = allEvents.filter(event => 
-        !event.allDay && event.startDate && event.endDate
-      );
-      
-      setEvents(timeEvents);
-      return timeEvents;
-    } catch (error) {
-      setError('Failed to load calendar events');
-      console.error('Load events error:', error);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const findFreeSlots = async (date = new Date(), minDuration = 25) => {
-    try {
-      setLoading(true);
-      
-      const startOfDay = new Date(date);
-      startOfDay.setHours(8, 0, 0, 0); // Start at 8 AM
-      
-      const endOfDay = new Date(date);
-      endOfDay.setHours(22, 0, 0, 0); // End at 10 PM
-      
-      const dayEvents = await loadEvents(startOfDay, endOfDay);
-      
-      // Generate free slots using the calendar service algorithm
-      const slots = calendarService.generateFreeSlots(
-        dayEvents, 
-        startOfDay, 
-        endOfDay, 
-        minDuration
-      );
-      
-      // Add suggested study method for each slot
-      const slotsWithSuggestions = slots.map(slot => ({
-        ...slot,
-        suggestedMethod: calendarService.suggestStudyMethod(slot.duration),
-        quality: calendarService.assessSlotQuality(slot, dayEvents)
-      }));
-      
-      // Sort by quality and time
-      const sortedSlots = slotsWithSuggestions.sort((a, b) => {
-        if (a.quality !== b.quality) return b.quality - a.quality;
-        return new Date(a.startTime) - new Date(b.startTime);
-      });
-      
-      setFreeSlots(sortedSlots);
-      return sortedSlots;
-      
-    } catch (error) {
-      setError('Failed to find free time slots');
-      console.error('Find free slots error:', error);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getTodaysFreeSlots = async () => {
-    const today = new Date();
-    return await findFreeSlots(today);
-  };
-
-  const getUpcomingFreeSlots = async (days = 3) => {
-    const slots = [];
-    
-    for (let i = 0; i < days; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      
-      const daySlots = await findFreeSlots(date);
-      slots.push({
-        date: date.toISOString().split('T')[0],
-        slots: daySlots.slice(0, 3) // Top 3 slots per day
-      });
-    }
-    
-    return slots;
-  };
-
-  const toggleCalendarSelection = (calendarId) => {
-    setSelectedCalendars(prev => {
-      if (prev.includes(calendarId)) {
-        return prev.filter(id => id !== calendarId);
-      } else {
-        return [...prev, calendarId];
-      }
-    });
-  };
-
-  const createStudyEvent = async (slot, studyMethod, duration) => {
-    try {
-      const eventDetails = {
-        title: `📚 Study Session - ${studyMethod}`,
-        startDate: new Date(slot.startTime),
-        endDate: new Date(slot.startTime + duration * 60 * 1000),
-        notes: `Study session created by Focus Time app\nMethod: ${studyMethod}\nDuration: ${duration} minutes`,
-        timeZone: 'default'
-      };
-
-      // Use the first selected calendar or primary calendar
-      const targetCalendar = calendars.find(cal => 
-        selectedCalendars.includes(cal.id) && cal.allowsModifications
-      );
-
-      if (!targetCalendar) {
-        throw new Error('No writable calendar available');
-      }
-
-      const eventId = await Calendar.createEventAsync(targetCalendar.id, eventDetails);
-      
-      // Refresh events after creating
-      await findFreeSlots();
-      
-      return eventId;
-    } catch (error) {
-      console.error('Failed to create study event:', error);
-      throw error;
-    }
-  };
-
-  const refreshCalendarData = async () => {
-    await loadCalendars();
-    await getTodaysFreeSlots();
-  };
+  }, [calendars]);
 
   return {
-    // State
-    calendarPermission,
-    calendars,
-    events,
+    hasPermission,
     freeSlots,
     loading,
-    error,
-    selectedCalendars,
-    
-    // Actions
-    requestCalendarPermission,
-    loadCalendars,
-    loadEvents,
+    requestPermissions,
     findFreeSlots,
-    getTodaysFreeSlots,
-    getUpcomingFreeSlots,
-    toggleCalendarSelection,
-    createStudyEvent,
-    refreshCalendarData,
-    
-    // Utilities
-    hasPermission: calendarPermission === 'granted',
-    hasCalendars: calendars.length > 0,
-    hasSelectedCalendars: selectedCalendars.length > 0
+    formatTimeSlot,
+    getTodaysEvents
   };
 };

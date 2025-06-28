@@ -21,7 +21,7 @@ const { width, height } = Dimensions.get('window');
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { todaysSessions, currentStreak, weeklyMinutes } = useStats();
-  const { hasPermission, freeSlots, requestPermissions, getFreeTimeToday } = useCalendar();
+  const { hasPermission, freeSlots, findFreeSlots } = useCalendar();
   
   const [greeting, setGreeting] = useState('');
   const [nextSuggestedTime, setNextSuggestedTime] = useState(null);
@@ -44,10 +44,16 @@ export default function HomeScreen() {
     React.useCallback(() => {
       loadUserData();
       if (hasPermission) {
-        getFreeTimeToday();
+        findFreeSlots();
       }
     }, [hasPermission])
   );
+
+  const handleGetFreeTime = async () => {
+    if (hasPermission) {
+      await findFreeSlots(); // This will update freeSlots state
+    }
+  };
 
   const loadUserData = async () => {
     const preferences = await getData('userPreferences');
