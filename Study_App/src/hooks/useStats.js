@@ -2,159 +2,257 @@ import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEYS = {
-  SESSIONS: 'study_sessions',
-  USER_PREFERENCES: 'user_preferences',
-  STREAK_DATA: 'streak_data'
+  SESSIONS: '@StudyApp:study_sessions',
+  PREFERENCES: '@StudyApp:user_preferences',
+  STREAK_DATA: '@StudyApp:streak_data'
 };
 
-export const useStats = () => {
+export default function useStats() {
   const [todaysSessions, setTodaysSessions] = useState([]);
-  const [currentStreak, setCurrentStreak] = useState(0);
   const [weeklyMinutes, setWeeklyMinutes] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Get today's date string
-  const getTodayString = () => {
-    return new Date().toISOString().split('T')[0];
-  };
+  // Initialize stats on hook mount
+  useEffect(() => {
+    loadStats();
+  }, []);
 
-  // Get start of current week
-  const getWeekStart = () => {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const diff = now.getDate() - dayOfWeek;
-    return new Date(now.setDate(diff));
-  };
-
-  // Load all stats data
   const loadStats = async () => {
     try {
       setLoading(true);
-      
-      // Load sessions
-      const sessionsJson = await AsyncStorage.getItem(STORAGE_KEYS.SESSIONS);
-      const allSessions = sessionsJson ? JSON.parse(sessionsJson) : [];
-      
-      // Filter today's sessions
-      const today = getTodayString();
-      const todaysSessions = allSessions.filter(session => 
-        session.date === today
-      );
-      
-      // Calculate weekly minutes
-      const weekStart = getWeekStart();
-      const weeklyTotal = allSessions
-        .filter(session => new Date(session.date) >= weekStart)
-        .reduce((total, session) => total + session.duration, 0);
-      
-      // Load streak data
-      const streakJson = await AsyncStorage.getItem(STORAGE_KEYS.STREAK_DATA);
-      const streakData = streakJson ? JSON.parse(streakJson) : { current: 0, lastDate: null };
-      
-      setTodaysSessions(todaysSessions);
-      setWeeklyMinutes(weeklyTotal);
-      setCurrentStreak(streakData.current);
-      
+      await Promise.all([
+        loadTodaysSessions(),
+        loadWeeklyMinutes(),
+        loadCurrentStreak()
+      ]);
     } catch (error) {
       console.error('Failed to load stats:', error);
-      // Return empty state on error
-      setTodaysSessions([]);
-      setWeeklyMinutes(0);
-      setCurrentStreak(0);
+      setError(error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Add a completed study session
+  const loadTodaysSessions = async () => {
+    try {
+      const sessionsData = await AsyncStorage.getItem(STORAGE_KEYS.SESSIONS);
+      if (!sessionsData) {
+        setTodaysSessions([]);
+        return [];
+      }
+      
+      const allSessions = JSON.parse(sessionsData);
+      const today = new Date().toDateString();
+      const todaySessions = allSessions.filter(session => 
+        new Date(session.date).toDateString() === today
+      );
+      
+      setTodaysSessions(todaySessions);
+      return todaySessions;
+    } catch (error) {
+      console.error('Failed to load today\'s sessions:', error);
+      setTodaysSessions([]);
+      return [];
+    }
+  };
+
+  const loadWeeklyMinutes = async () => {
+    try {
+      const sessionsData = await AsyncStorage.getItem(STORAGE_KEYS.SESSIONS);
+      if (!sessionsData) {
+        setWeeklyMinutes(0);
+        return 0;
+      }
+      
+      const allSessions = JSON.parse(sessionsData);
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      
+      const weekSessions = allSessions.filter(session => 
+        new Date(session.date) >= oneWeekAgo
+      );
+      
+      const totalMinutes = weekSessions.reduce((total, session) => 
+        total + (session.duration || 0), 0
+      );
+      
+      setWeeklyMinutes(totalMinutes);
+      return totalMinutes;
+    } catch (error) {
+      console.error('Failed to load weekly minutes:', error);
+      setWeeklyMinutes(0);
+      return 0;
+    }
+  };
+
+  const loadCurrentStreak = async () => {
+    try {
+      const streakData = await AsyncStorage.getItem(STORAGE_KEYS.STREAK_DATA);
+      if (!streakData) {
+        setCurrentStreak(0);
+        return 0;
+      }
+      
+      const streak = JSON.parse(streakData);
+      
+      // Check if streak is still valid (studied yesterday or today)
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const lastStudyDate = streak.lastDate ? new Date(streak.lastDate) : null;
+      
+      if (!lastStudyDate || 
+          (lastStudyDate.toDateString() !== today.toDateString() && 
+           lastStudyDate.toDateString() !== yesterday.toDateString())) {
+        // Streak broken if last study was more than 1 day ago
+        const brokenStreak = { count: 0, lastDate: null };
+        await AsyncStorage.setItem(STORAGE_KEYS.STREAK_DATA, JSON.stringify(brokenStreak));
+        setCurrentStreak(0);
+        return 0;
+      }
+      
+      setCurrentStreak(streak.count);
+      return streak.count;
+    } catch (error) {
+      console.error('Failed to load streak:', error);
+      setCurrentStreak(0);
+      return 0;
+    }
+  };
+
   const addSession = async (duration, method = 'pomodoro') => {
     try {
-      const session = {
+      const newSession = {
         id: Date.now().toString(),
-        date: getTodayString(),
+        date: new Date().toISOString(),
         duration: duration, // in minutes
         method: method,
         completedAt: new Date().toISOString()
       };
 
-      // Load existing sessions
-      const sessionsJson = await AsyncStorage.getItem(STORAGE_KEYS.SESSIONS);
-      const existingSessions = sessionsJson ? JSON.parse(sessionsJson) : [];
+      // Add to sessions
+      const sessionsData = await AsyncStorage.getItem(STORAGE_KEYS.SESSIONS);
+      const allSessions = sessionsData ? JSON.parse(sessionsData) : [];
+      allSessions.push(newSession);
       
-      // Add new session
-      const updatedSessions = [...existingSessions, session];
-      await AsyncStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updatedSessions));
-      
+      await AsyncStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(allSessions));
+
       // Update streak
       await updateStreak();
-      
-      // Reload stats
+
+      // Refresh stats
       await loadStats();
-      
-      return true;
+
+      return newSession;
     } catch (error) {
       console.error('Failed to add session:', error);
-      return false;
+      throw error;
     }
   };
 
-  // Update streak counter
   const updateStreak = async () => {
     try {
-      const today = getTodayString();
-      const streakJson = await AsyncStorage.getItem(STORAGE_KEYS.STREAK_DATA);
-      let streakData = streakJson ? JSON.parse(streakJson) : { current: 0, lastDate: null };
+      const today = new Date();
+      const todayString = today.toDateString();
       
-      if (streakData.lastDate === today) {
-        // Already counted today
-        return;
+      const streakData = await AsyncStorage.getItem(STORAGE_KEYS.STREAK_DATA);
+      const currentStreakData = streakData ? JSON.parse(streakData) : { count: 0, lastDate: null };
+      
+      const lastStudyDate = currentStreakData.lastDate ? new Date(currentStreakData.lastDate) : null;
+      const lastStudyDateString = lastStudyDate ? lastStudyDate.toDateString() : null;
+      
+      let newStreakData;
+      
+      if (!lastStudyDate) {
+        // First session ever
+        newStreakData = { count: 1, lastDate: today.toISOString() };
+      } else if (lastStudyDateString === todayString) {
+        // Already studied today, don't increment
+        newStreakData = currentStreakData;
+      } else {
+        // Check if yesterday
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        if (lastStudyDateString === yesterday.toDateString()) {
+          // Continuing streak
+          newStreakData = { 
+            count: currentStreakData.count + 1, 
+            lastDate: today.toISOString() 
+          };
+        } else {
+          // Streak broken, start new
+          newStreakData = { count: 1, lastDate: today.toISOString() };
+        }
       }
       
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayString = yesterday.toISOString().split('T')[0];
-      
-      if (streakData.lastDate === yesterdayString) {
-        // Continue streak
-        streakData.current += 1;
-      } else if (streakData.lastDate !== today) {
-        // Streak broken or first time
-        streakData.current = 1;
-      }
-      
-      streakData.lastDate = today;
-      await AsyncStorage.setItem(STORAGE_KEYS.STREAK_DATA, JSON.stringify(streakData));
+      await AsyncStorage.setItem(STORAGE_KEYS.STREAK_DATA, JSON.stringify(newStreakData));
+      setCurrentStreak(newStreakData.count);
       
     } catch (error) {
       console.error('Failed to update streak:', error);
     }
   };
 
-  // Clear all data (for testing)
   const clearAllData = async () => {
     try {
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.SESSIONS,
-        STORAGE_KEYS.STREAK_DATA
+        STORAGE_KEYS.STREAK_DATA,
+        STORAGE_KEYS.PREFERENCES
       ]);
-      await loadStats();
+      
+      setTodaysSessions([]);
+      setWeeklyMinutes(0);
+      setCurrentStreak(0);
     } catch (error) {
       console.error('Failed to clear data:', error);
+      throw error;
     }
   };
 
-  // Load data on mount
-  useEffect(() => {
-    loadStats();
-  }, []);
+  const getSessionHistory = async (days = 7) => {
+    try {
+      const sessionsData = await AsyncStorage.getItem(STORAGE_KEYS.SESSIONS);
+      const allSessions = sessionsData ? JSON.parse(sessionsData) : [];
+      
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      return allSessions
+        .filter(session => new Date(session.date) >= cutoffDate)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+    } catch (error) {
+      console.error('Failed to get session history:', error);
+      return [];
+    }
+  };
+
+  // Calculate today's total study time
+  const todaysMinutes = todaysSessions.reduce((total, session) => 
+    total + (session.duration || 0), 0
+  );
 
   return {
+    // State
     todaysSessions,
-    currentStreak,
     weeklyMinutes,
+    currentStreak,
+    todaysMinutes,
     loading,
+    error,
+    
+    // Actions
     addSession,
+    loadStats,
     clearAllData,
-    refreshStats: loadStats
+    getSessionHistory,
+    
+    // Computed values
+    todaysSessionCount: todaysSessions.length,
+    weeklySessionCount: Math.floor(weeklyMinutes / 25) // Rough estimate assuming 25min average
   };
 };

@@ -12,32 +12,40 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { useStats } from '../hooks/useStats';
-import { useCalendar } from '../hooks/useCalendar';
 import { getData } from '../services/storageService';
 
 const { width, height } = Dimensions.get('window');
 
+import useStats from '../hooks/useStats';
+import useCalendar from '../hooks/useCalendar';
+
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { todaysSessions, currentStreak, weeklyMinutes } = useStats();
-  const { hasPermission, freeSlots, findFreeSlots } = useCalendar();
+  const { hasPermission, freeSlots, findFreeSlots, requestPermissions } = useCalendar();
+
   
   const [greeting, setGreeting] = useState('');
   const [nextSuggestedTime, setNextSuggestedTime] = useState(null);
   const [userName, setUserName] = useState('');
 
   // Set greeting based on time of day
+  // useEffect(() => {
+  //   const hour = new Date().getHours();
+  //   if (hour < 12) {
+  //     setGreeting('Good Morning');
+  //   } else if (hour < 17) {
+  //     setGreeting('Good Afternoon');
+  //   } else {
+  //     setGreeting('Good Evening');
+  //   }
+  // }, []);
   useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) {
-      setGreeting('Good Morning');
-    } else if (hour < 17) {
-      setGreeting('Good Afternoon');
-    } else {
-      setGreeting('Good Evening');
+    if (!hasPermission) {
+      requestPermissions();
     }
-  }, []);
+  }, [hasPermission]);
+
 
   // Load user preferences and calendar data when screen focuses
   useFocusEffect(
