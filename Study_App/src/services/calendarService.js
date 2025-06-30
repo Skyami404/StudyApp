@@ -4,8 +4,8 @@ class CalendarService {
     // Study method configurations
     studyMethods = {
       pomodoro: { duration: 25, break: 5, name: 'Pomodoro' },
-      focus45: { duration: 45, break: 15, name: 'Focus Session' },
-      deepwork90: { duration: 90, break: 30, name: 'Deep Work' }
+      focus: { duration: 45, break: 15, name: 'Focus' },
+      deepwork: { duration: 90, break: 30, name: 'Deep Work' }
     };
   
     /**
@@ -84,9 +84,9 @@ class CalendarService {
      */
     suggestStudyMethod(duration) {
       if (duration >= 90) {
-        return 'deepwork90';
+        return 'deepwork';
       } else if (duration >= 45) {
-        return 'focus45';
+        return 'focus';
       } else if (duration >= 25) {
         return 'pomodoro';
       } else {
