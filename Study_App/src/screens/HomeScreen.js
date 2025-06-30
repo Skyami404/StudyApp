@@ -80,9 +80,9 @@ export default function HomeScreen() {
   }, [freeSlots]);
 
   const handleQuickStudy = () => {
-    navigation.navigate('StudyMethod', { 
-      isQuickStudy: true,
-      defaultMethod: 'pomodoro'
+    navigation.navigate('Study', { 
+      method: 'pomodoro',
+      autoStart: true
     });
   };
 
@@ -110,7 +110,8 @@ export default function HomeScreen() {
   };
 
   const handleSettings = () => {
-    navigation.navigate('Settings');
+    // TODO: Implement settings screen
+    Alert.alert('Settings', 'Settings screen coming soon!');
   };
 
   const handleViewStats = () => {
@@ -258,7 +259,7 @@ export default function HomeScreen() {
           <View style={styles.methodsGrid}>
             <TouchableOpacity 
               style={styles.methodCard}
-              onPress={() => navigation.navigate('StudyMethod', { defaultMethod: 'pomodoro' })}
+              onPress={() => navigation.navigate('Study', { method: 'pomodoro' })}
             >
               <Ionicons name="timer-outline" size={20} color="#4A90E2" />
               <Text style={styles.methodTitle}>Pomodoro</Text>
@@ -267,7 +268,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.methodCard}
-              onPress={() => navigation.navigate('StudyMethod', { defaultMethod: 'focus' })}
+              onPress={() => navigation.navigate('Study', { method: 'focus' })}
             >
               <Ionicons name="bulb-outline" size={20} color="#7B68EE" />
               <Text style={styles.methodTitle}>Focus</Text>
@@ -276,7 +277,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity 
               style={styles.methodCard}
-              onPress={() => navigation.navigate('StudyMethod', { defaultMethod: 'deepwork' })}
+              onPress={() => navigation.navigate('Study', { method: 'deepwork' })}
             >
               <Ionicons name="library-outline" size={20} color="#FF6B35" />
               <Text style={styles.methodTitle}>Deep Work</Text>

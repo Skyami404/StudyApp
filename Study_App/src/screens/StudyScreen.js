@@ -30,8 +30,8 @@ export default function StudyScreen({ route, navigation }) {
     if (route.params) {
       const { autoStart, method } = route.params;
       
-      // Set method if specified
-      if (method && method !== selectedMethod) {
+      // Set method if specified and valid
+      if (method && STUDY_METHODS[method] && method !== selectedMethod) {
         changeMethod(method);
       }
       
@@ -94,7 +94,7 @@ export default function StudyScreen({ route, navigation }) {
         <View style={styles.timerDisplay}>
           <Text style={styles.timerText}>{formattedTime}</Text>
           <Text style={styles.methodLabel}>
-            {STUDY_METHODS[selectedMethod].name}
+            {STUDY_METHODS[selectedMethod]?.name || 'Study Session'}
           </Text>
         </View>
       </View>
@@ -141,7 +141,7 @@ export default function StudyScreen({ route, navigation }) {
         <View style={styles.completedContainer}>
           <Text style={styles.completedTitle}>Session Complete!</Text>
           <Text style={styles.completedSubtitle}>
-            Great job on your {STUDY_METHODS[selectedMethod].name} session
+            Great job on your {STUDY_METHODS[selectedMethod]?.name || 'Study'} session
           </Text>
           <View style={styles.completedButtons}>
             <TouchableOpacity style={styles.startButton} onPress={stopTimer}>

@@ -3,12 +3,12 @@ import { useState, useEffect, useRef } from 'react';
 
 
 export const STUDY_METHODS = {
-  POMODORO: { name: 'Pomodoro', duration: 25 * 60 }, // 25 minutes in seconds
-  MEDIUM: { name: '45 min Focus', duration: 45 * 60 }, // 45 minutes
-  LONG: { name: '90 min Deep', duration: 90 * 60 }, // 90 minutes
+  pomodoro: { name: 'Pomodoro', duration: 25 * 60 }, // 25 minutes in seconds
+  focus: { name: 'Focus', duration: 45 * 60 }, // 45 minutes
+  deepwork: { name: 'Deep Work', duration: 90 * 60 }, // 90 minutes
 };
 
-export const useTimer = (initialMethod = 'POMODORO') => {
+export const useTimer = (initialMethod = 'pomodoro') => {
   const [selectedMethod, setSelectedMethod] = useState(initialMethod);
   const [timeRemaining, setTimeRemaining] = useState(STUDY_METHODS[initialMethod].duration);
   const [isRunning, setIsRunning] = useState(false);
