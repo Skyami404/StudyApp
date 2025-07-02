@@ -15,44 +15,39 @@ export default function useCalendar() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Initialize calendar permissions on mount
+  // Always request permissions on mount if not already granted
   useEffect(() => {
-    initializeCalendar();
-  }, []);
-
-  const initializeCalendar = async () => {
-    try {
-      const { status } = await Calendar.getCalendarPermissionsAsync();
-      const granted = status === 'granted';
-      setHasPermission(granted);
-      
-      if (granted) {
-        await loadCalendars();
+    (async () => {
+      try {
+        const { status } = await Calendar.getCalendarPermissionsAsync();
+        if (status !== 'granted') {
+          await requestPermissions();
+        } else {
+          setHasPermission(true);
+          await loadCalendars();
+        }
+      } catch (e) {
+        setError('Failed to check calendar permissions.');
       }
-    } catch (error) {
-      console.error('Failed to initialize calendar:', error);
-      setError(error);
-    }
-  };
+    })();
+  }, []);
 
   const requestPermissions = async () => {
     try {
       setLoading(true);
       const { status } = await Calendar.requestCalendarPermissionsAsync();
       const granted = status === 'granted';
-      
       setHasPermission(granted);
-      
       if (granted) {
         await AsyncStorage.setItem(STORAGE_KEYS.CALENDAR_PERMISSIONS, 'granted');
         await loadCalendars();
         return { success: true };
       } else {
+        setError('Calendar permission denied. Please enable calendar access in your device settings.');
         return { success: false, message: 'Calendar permission denied' };
       }
     } catch (error) {
-      console.error('Failed to request permissions:', error);
-      setError(error);
+      setError('Failed to request calendar permissions.');
       return { success: false, message: error.message };
     } finally {
       setLoading(false);
@@ -64,20 +59,15 @@ export default function useCalendar() {
       if (!hasPermission) {
         throw new Error('No calendar permission');
       }
-
       const calendarList = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-      
-      // Filter out calendars that don't allow reading events
-      const accessibleCalendars = calendarList.filter(cal => 
-        cal.allowsModifications !== false && 
-        cal.accessLevel !== Calendar.CalendarAccessLevel.NONE
-      );
-      
-      setCalendars(accessibleCalendars);
-      return accessibleCalendars;
+      // Include all calendars, even read-only
+      setCalendars(calendarList);
+      if (calendarList.length === 0) {
+        setError('No calendars found on this device. Please add a calendar account in your device settings.');
+      }
+      return calendarList;
     } catch (error) {
-      console.error('Failed to load calendars:', error);
-      setError(error);
+      setError('Failed to load calendars.');
       return [];
     }
   };

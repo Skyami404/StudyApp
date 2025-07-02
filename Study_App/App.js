@@ -1,8 +1,9 @@
 // App.js
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 
 // Import your screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -12,7 +13,26 @@ import StudyScreen from './src/screens/StudyScreen';
 
 const Stack = createStackNavigator();
 
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 export default function App() {
+  useEffect(() => {
+    // Request notification permissions on app start
+    const requestPermissions = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      console.log('App notification permission status:', status);
+    };
+    
+    requestPermissions();
+  }, []);
+
   return (
     <NavigationContainer>
       <StatusBar style="light" backgroundColor="#1a1a1a" />

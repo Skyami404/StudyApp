@@ -1,4 +1,4 @@
-// Updated StudyScreen.js to handle navigation parameters
+// Updated StudyScreen.js to handle navigation parameters and app blocking
 import React, { useEffect } from 'react';
 import {
   View,
@@ -7,7 +7,8 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import { useTimer, STUDY_METHODS } from '../hooks/useTimer';
+import { useTimerWithBlocking, STUDY_METHODS } from '../hooks/useTimerWithBlocking';
+import BlockingOverlay from '../components/BlockingOverlay';
 
 const { width } = Dimensions.get('window');
 
@@ -23,7 +24,12 @@ export default function StudyScreen({ route, navigation }) {
     stopTimer,
     changeMethod,
     isCompleted,
-  } = useTimer();
+    blockingEnabled,
+    showBlockingOverlay,
+    appSwitchAttempts,
+    handleReturnToStudy,
+    handleDisableBlocking,
+  } = useTimerWithBlocking();
 
   // Handle navigation parameters
   useEffect(() => {
@@ -104,8 +110,8 @@ export default function StudyScreen({ route, navigation }) {
   const renderControls = () => (
     <View style={styles.controlsContainer}>
       {!isRunning && !isPaused && (
-        <TouchableOpacity style={styles.startButton} onPress={startTimer}>
-          <Text style={styles.startButtonText}>Start</Text>
+        <TouchableOpacity style={styles.startButton} onPress={() => startTimer(true)}>
+          <Text style={styles.startButtonText}>Start with Blocking</Text>
         </TouchableOpacity>
       )}
 
@@ -116,7 +122,7 @@ export default function StudyScreen({ route, navigation }) {
       )}
 
       {isPaused && (
-        <TouchableOpacity style={styles.resumeButton} onPress={startTimer}>
+        <TouchableOpacity style={styles.resumeButton} onPress={() => startTimer(true)}>
           <Text style={styles.controlButtonText}>Resume</Text>
         </TouchableOpacity>
       )}
@@ -125,6 +131,16 @@ export default function StudyScreen({ route, navigation }) {
         <TouchableOpacity style={styles.stopButton} onPress={stopTimer}>
           <Text style={styles.controlButtonText}>Stop</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Blocking status indicator */}
+      {blockingEnabled && (
+        <View style={styles.blockingStatus}>
+          <Text style={styles.blockingStatusText}>🔒 App Blocking Active</Text>
+          {appSwitchAttempts > 0 && (
+            <Text style={styles.attemptsText}>Attempts: {appSwitchAttempts}</Text>
+          )}
+        </View>
       )}
     </View>
   );
@@ -162,6 +178,15 @@ export default function StudyScreen({ route, navigation }) {
       {renderMethodSelector()}
       {renderTimer()}
       {renderControls()}
+      
+      {/* Blocking Overlay */}
+      <BlockingOverlay
+        visible={showBlockingOverlay}
+        onReturnToStudy={handleReturnToStudy}
+        onDisableBlocking={handleDisableBlocking}
+        timeRemaining={formattedTime}
+        methodName={STUDY_METHODS[selectedMethod]?.name || 'Study'}
+      />
     </View>
   );
 }
@@ -249,31 +274,36 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   controlsContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 20,
+    gap: 16,
     marginBottom: 40,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   startButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 25,
-    minWidth: 120,
+    minWidth: 200,
+    maxWidth: '90%',
     alignItems: 'center',
   },
   startButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   pauseButton: {
     backgroundColor: '#FF9800',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
-    minWidth: 80,
+    minWidth: 100,
+    maxWidth: '80%',
     alignItems: 'center',
   },
   resumeButton: {
@@ -281,7 +311,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
-    minWidth: 80,
+    minWidth: 100,
+    maxWidth: '80%',
     alignItems: 'center',
   },
   stopButton: {
@@ -289,13 +320,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
-    minWidth: 80,
+    minWidth: 100,
+    maxWidth: '80%',
     alignItems: 'center',
   },
   controlButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
   },
   completedContainer: {
     flex: 1,
@@ -330,5 +363,29 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  blockingStatus: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    width: '100%',
+    maxWidth: 300,
+  },
+  blockingStatusText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  attemptsText: {
+    color: '#FF9800',
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
   },
 });
