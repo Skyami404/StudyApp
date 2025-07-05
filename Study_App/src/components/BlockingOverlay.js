@@ -13,10 +13,10 @@ const { width, height } = Dimensions.get('window');
 
 export default function BlockingOverlay({ 
   visible, 
-  onReturnToStudy, 
-  onDisableBlocking,
-  timeRemaining,
-  methodName 
+  onContinue, 
+  onDisable,
+  appSwitchAttempts,
+  blockingLevel
 }) {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.8));
@@ -56,6 +56,28 @@ export default function BlockingOverlay({
 
   if (!visible) return null;
 
+  const getBlockingMessage = () => {
+    switch (blockingLevel) {
+      case 'strict':
+        return 'Strict focus mode is active. Please return to your study session immediately!';
+      case 'screen-time':
+        return 'Screen Time integration is active. Stay focused on your study session!';
+      default:
+        return 'Stay focused and complete your study session for the best results!';
+    }
+  };
+
+  const getIcon = () => {
+    switch (blockingLevel) {
+      case 'strict':
+        return '🚫';
+      case 'screen-time':
+        return '🔒';
+      default:
+        return '⏰';
+    }
+  };
+
   return (
     <Modal
       transparent={true}
@@ -75,35 +97,40 @@ export default function BlockingOverlay({
         >
           <View style={styles.content}>
             <View style={styles.iconContainer}>
-              <Text style={styles.icon}>⏰</Text>
+              <Text style={styles.icon}>{getIcon()}</Text>
             </View>
             
-            <Text style={styles.title}>Study Session Active</Text>
-            
-            <Text style={styles.subtitle}>
-              Your {methodName} timer is still running
+            <Text style={styles.title}>
+              {blockingLevel === 'strict' ? 'Strict Focus Mode' : 'Study Session Active'}
             </Text>
             
-            <View style={styles.timerContainer}>
-              <Text style={styles.timerLabel}>Time Remaining:</Text>
-              <Text style={styles.timerText}>{timeRemaining}</Text>
-            </View>
+            <Text style={styles.subtitle}>
+              App blocking is preventing distractions
+            </Text>
+            
+            {appSwitchAttempts > 0 && (
+              <View style={styles.attemptsContainer}>
+                <Text style={styles.attemptsText}>
+                  App switch attempts: {appSwitchAttempts}
+                </Text>
+              </View>
+            )}
             
             <Text style={styles.message}>
-              Stay focused and complete your study session for the best results!
+              {getBlockingMessage()}
             </Text>
             
             <View style={styles.buttonContainer}>
               <TouchableOpacity 
                 style={styles.primaryButton} 
-                onPress={onReturnToStudy}
+                onPress={onContinue}
               >
-                <Text style={styles.primaryButtonText}>Return to Study</Text>
+                <Text style={styles.primaryButtonText}>Continue Studying</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
                 style={styles.secondaryButton} 
-                onPress={onDisableBlocking}
+                onPress={onDisable}
               >
                 <Text style={styles.secondaryButtonText}>Disable Blocking</Text>
               </TouchableOpacity>
@@ -168,19 +195,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  timerContainer: {
+  attemptsContainer: {
     alignItems: 'center',
     marginBottom: 20,
   },
-  timerLabel: {
+  attemptsText: {
     fontSize: 14,
     color: '#888888',
-    marginBottom: 5,
-  },
-  timerText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#4CAF50',
   },
   message: {
     fontSize: 14,

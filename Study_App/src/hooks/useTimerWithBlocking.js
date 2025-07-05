@@ -1,42 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
-import appBlockingService from '../services/appBlockingService';
-
-export const STUDY_METHODS = {
-  pomodoro: { name: 'Pomodoro', duration: 25 * 60 }, // 25 minutes in seconds
-  focus: { name: 'Focus', duration: 45 * 60 }, // 45 minutes
-  deepwork: { name: 'Deep Work', duration: 90 * 60 }, // 90 minutes
-};
+import { enhancedAppBlockingService } from '../services/enhancedAppBlockingService';
+import { STUDY_METHODS } from '../constants/studyMethods';
 
 export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
-  const [selectedMethod, setSelectedMethod] = useState(initialMethod);
-  const [timeRemaining, setTimeRemaining] = useState(STUDY_METHODS[initialMethod].duration);
+  const [timeLeft, setTimeLeft] = useState(STUDY_METHODS[initialMethod].duration);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const [currentPhase, setCurrentPhase] = useState('Ready to start');
   const [blockingEnabled, setBlockingEnabled] = useState(false);
-  const [showBlockingOverlay, setShowBlockingOverlay] = useState(false);
+  const [blockingLevel, setBlockingLevel] = useState('standard');
   const [appSwitchAttempts, setAppSwitchAttempts] = useState(0);
+  const [showOverlay, setShowOverlay] = useState(false);
   
   const intervalRef = useRef(null);
   const startTimeRef = useRef(null);
 
-  // Calculate progress percentage
-  const progress = 1 - (timeRemaining / STUDY_METHODS[selectedMethod].duration);
-
-  // Format time for display (MM:SS)
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Initialize app blocking service
+  // Initialize enhanced app blocking service
   useEffect(() => {
-    appBlockingService.initialize();
+    enhancedAppBlockingService.initialize();
     
     return () => {
-      appBlockingService.cleanup();
+      enhancedAppBlockingService.cleanup();
     };
   }, []);
 
@@ -48,76 +34,80 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
   // Handle app switch attempts
   const handleAppSwitchAttempt = useCallback(() => {
     setAppSwitchAttempts(prev => prev + 1);
-    setShowBlockingOverlay(true);
+    setShowOverlay(true);
   }, []);
 
-  // Start timer with optional blocking
-  const startTimer = useCallback((enableBlocking = true) => {
+  // Start timer with blocking
+  const startTimer = useCallback((enableBlocking = true, level = 'standard') => {
     if (!isRunning && !isPaused) {
       // Starting fresh session
-      setSessionStartTime(new Date());
       startTimeRef.current = Date.now();
+      setCurrentPhase('Focus Time');
     } else if (isPaused) {
       // Resuming from pause
-      startTimeRef.current = Date.now() - ((STUDY_METHODS[selectedMethod].duration - timeRemaining) * 1000);
+      const elapsed = STUDY_METHODS[initialMethod].duration - timeLeft;
+      startTimeRef.current = Date.now() - (elapsed * 1000);
+      setCurrentPhase('Focus Time');
     }
     
     setIsRunning(true);
     setIsPaused(false);
+    setBlockingLevel(level);
 
-    // Start app blocking if enabled
+    // Start enhanced app blocking if enabled
     if (enableBlocking) {
-      appBlockingService.startBlocking(handleBlockingStateChange, handleAppSwitchAttempt);
-      
-      // Show focus mode suggestion on first start
-      if (!sessionStartTime) {
-        setTimeout(() => {
-          appBlockingService.showFocusModeSuggestion();
-        }, 2000);
-      }
+      enhancedAppBlockingService.startBlocking(handleBlockingStateChange, handleAppSwitchAttempt, level);
     }
-  }, [isRunning, isPaused, selectedMethod, timeRemaining, sessionStartTime, handleBlockingStateChange, handleAppSwitchAttempt]);
+  }, [isRunning, isPaused, initialMethod, timeLeft, handleBlockingStateChange, handleAppSwitchAttempt]);
 
   // Pause timer
   const pauseTimer = useCallback(() => {
+    console.log('Pausing timer...');
     setIsRunning(false);
     setIsPaused(true);
+    setCurrentPhase('Paused');
     
     // Stop app blocking when paused
     if (blockingEnabled) {
-      appBlockingService.stopBlocking();
+      enhancedAppBlockingService.stopBlocking();
+    }
+    
+    // Clear the interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   }, [blockingEnabled]);
 
   // Stop timer
   const stopTimer = useCallback(() => {
+    console.log('Stopping timer...');
     setIsRunning(false);
     setIsPaused(false);
-    setTimeRemaining(STUDY_METHODS[selectedMethod].duration);
-    setSessionStartTime(null);
-    setShowBlockingOverlay(false);
+    setTimeLeft(STUDY_METHODS[initialMethod].duration);
+    setProgress(0);
+    setCurrentPhase('Ready to start');
+    setShowOverlay(false);
     setAppSwitchAttempts(0);
     
     // Stop app blocking
     if (blockingEnabled) {
-      appBlockingService.stopBlocking();
+      enhancedAppBlockingService.stopBlocking();
     }
     
+    // Clear the interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-  }, [selectedMethod, blockingEnabled]);
+    
+    // Reset start time
+    startTimeRef.current = null;
+  }, [initialMethod, blockingEnabled]);
 
-  // Change study method
-  const changeMethod = useCallback((method) => {
-    stopTimer(); // Reset current session
-    setSelectedMethod(method);
-    setTimeRemaining(STUDY_METHODS[method].duration);
-  }, [stopTimer]);
-
-  // Handle return to study from blocking overlay
-  const handleReturnToStudy = useCallback(() => {
-    setShowBlockingOverlay(false);
+  // Handle continue from overlay
+  const handleContinue = useCallback(() => {
+    setShowOverlay(false);
   }, []);
 
   // Handle disable blocking from overlay
@@ -131,54 +121,66 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
           text: 'Disable', 
           style: 'destructive',
           onPress: () => {
-            appBlockingService.stopBlocking();
-            setShowBlockingOverlay(false);
+            enhancedAppBlockingService.stopBlocking();
+            setShowOverlay(false);
           }
         },
       ]
     );
   }, []);
 
-  // Enable blocking for current session
-  const enableBlocking = useCallback(() => {
-    if (isRunning && !blockingEnabled) {
-      appBlockingService.startBlocking(handleBlockingStateChange, handleAppSwitchAttempt);
+  // Toggle blocking
+  const handleToggleBlocking = useCallback(() => {
+    if (blockingEnabled) {
+      enhancedAppBlockingService.stopBlocking();
+    } else if (isRunning) {
+      enhancedAppBlockingService.startBlocking(handleBlockingStateChange, handleAppSwitchAttempt, blockingLevel);
+    }
+  }, [blockingEnabled, isRunning, blockingLevel, handleBlockingStateChange, handleAppSwitchAttempt]);
+
+  // Change blocking level
+  const handleBlockingLevelChange = useCallback((level) => {
+    setBlockingLevel(level);
+    if (isRunning && blockingEnabled) {
+      enhancedAppBlockingService.stopBlocking();
+      enhancedAppBlockingService.startBlocking(handleBlockingStateChange, handleAppSwitchAttempt, level);
     }
   }, [isRunning, blockingEnabled, handleBlockingStateChange, handleAppSwitchAttempt]);
 
-  // Disable blocking for current session
-  const disableBlocking = useCallback(() => {
-    if (blockingEnabled) {
-      appBlockingService.stopBlocking();
-    }
-  }, [blockingEnabled]);
+  // Show focus mode suggestion
+  const handleShowFocusModeSuggestion = useCallback(() => {
+    enhancedAppBlockingService.showFocusModeSuggestion();
+  }, []);
 
   // Timer countdown effect
   useEffect(() => {
-    if (isRunning && timeRemaining > 0) {
+    if (isRunning && timeLeft > 0) {
       intervalRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-        const remaining = STUDY_METHODS[selectedMethod].duration - elapsed;
+        const remaining = STUDY_METHODS[initialMethod].duration - elapsed;
         
         if (remaining <= 0) {
-          setTimeRemaining(0);
+          setTimeLeft(0);
+          setProgress(1);
           setIsRunning(false);
           setIsPaused(false);
-          setShowBlockingOverlay(false);
+          setShowOverlay(false);
+          setCurrentPhase('Complete!');
           
           // Stop app blocking when timer completes
           if (blockingEnabled) {
-            appBlockingService.stopBlocking();
+            enhancedAppBlockingService.stopBlocking();
           }
           
           // Show completion notification
           Alert.alert(
             'Session Complete! 🎉',
-            `Great job completing your ${STUDY_METHODS[selectedMethod].name} session!`,
+            `Great job completing your ${STUDY_METHODS[initialMethod].name} session!`,
             [{ text: 'OK' }]
           );
         } else {
-          setTimeRemaining(remaining);
+          setTimeLeft(remaining);
+          setProgress(1 - (remaining / STUDY_METHODS[initialMethod].duration));
         }
       }, 1000);
     } else {
@@ -194,7 +196,7 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
         intervalRef.current = null;
       }
     };
-  }, [isRunning, selectedMethod, blockingEnabled]);
+  }, [isRunning, initialMethod, blockingEnabled]);
 
   // Keep timer running when component unmounts/remounts
   useEffect(() => {
@@ -205,24 +207,22 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
   }, []);
 
   return {
-    selectedMethod,
-    timeRemaining,
+    timeLeft,
     isRunning,
     isPaused,
     progress,
-    sessionStartTime,
-    formattedTime: formatTime(timeRemaining),
+    currentPhase,
     blockingEnabled,
-    showBlockingOverlay,
+    blockingLevel,
     appSwitchAttempts,
+    showOverlay,
     startTimer,
     pauseTimer,
     stopTimer,
-    changeMethod,
-    enableBlocking,
-    disableBlocking,
-    handleReturnToStudy,
+    handleContinue,
     handleDisableBlocking,
-    isCompleted: timeRemaining === 0,
+    handleToggleBlocking,
+    handleBlockingLevelChange,
+    handleShowFocusModeSuggestion,
   };
 }; 

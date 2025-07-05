@@ -125,17 +125,7 @@ export default function HomeScreen() {
     });
   };
 
-  const getMotivationalMessage = () => {
-    if (currentStreak === 0) {
-      return "Ready to start your focus journey?";
-    } else if (currentStreak < 3) {
-      return "You're building momentum!";
-    } else if (currentStreak < 7) {
-      return "Great consistency!";
-    } else {
-      return "You're on fire! 🔥";
-    }
-  };
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -238,20 +228,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Motivation Section */}
-        <View style={styles.motivationSection}>
-          <View style={styles.motivationCard}>
-            <Text style={styles.motivationText}>
-              {getMotivationalMessage()}
-            </Text>
-            {currentStreak > 0 && (
-              <View style={styles.streakBadge}>
-                <Ionicons name="flame" size={16} color="#FF6B35" />
-                <Text style={styles.streakText}>{currentStreak} days</Text>
-              </View>
-            )}
-          </View>
-        </View>
+
 
         {/* Study Methods Quick Access */}
         <View style={styles.quickMethodsSection}>

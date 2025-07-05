@@ -1,142 +1,224 @@
 // Updated StudyScreen.js to handle navigation parameters and app blocking
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  Alert,
+  ScrollView,
 } from 'react-native';
-import { useTimerWithBlocking, STUDY_METHODS } from '../hooks/useTimerWithBlocking';
+import { useTimerWithBlocking } from '../hooks/useTimerWithBlocking';
+import { STUDY_METHODS } from '../constants/studyMethods';
+import MethodSelector from '../components/MethodSelector';
+import MusicControls from '../components/MusicControls';
 import BlockingOverlay from '../components/BlockingOverlay';
+import BlockingSettings from '../components/BlockingSettings';
+import { enhancedAppBlockingService } from '../services/enhancedAppBlockingService';
 
 const { width } = Dimensions.get('window');
 
 export default function StudyScreen({ route, navigation }) {
+  const [selectedMethod, setSelectedMethod] = useState('pomodoro');
+  const [showBlockingSettings, setShowBlockingSettings] = useState(false);
+  const [blockingSettings, setBlockingSettings] = useState({
+    enableScreenTime: false,
+    allowEmergencyCalls: true,
+  });
+
   const {
-    selectedMethod,
-    formattedTime,
+    timeLeft,
     isRunning,
     isPaused,
     progress,
+    currentPhase,
+    blockingEnabled,
+    blockingLevel,
+    appSwitchAttempts,
+    showOverlay,
     startTimer,
     pauseTimer,
     stopTimer,
-    changeMethod,
-    isCompleted,
-    blockingEnabled,
-    showBlockingOverlay,
-    appSwitchAttempts,
-    handleReturnToStudy,
+    handleContinue,
     handleDisableBlocking,
-  } = useTimerWithBlocking();
+    handleToggleBlocking,
+    handleBlockingLevelChange,
+    handleShowFocusModeSuggestion,
+  } = useTimerWithBlocking(selectedMethod);
 
   // Handle navigation parameters
   useEffect(() => {
-    if (route.params) {
+    if (route?.params) {
       const { autoStart, method } = route.params;
       
       // Set method if specified and valid
       if (method && STUDY_METHODS[method] && method !== selectedMethod) {
-        changeMethod(method);
+        setSelectedMethod(method);
       }
       
       // Auto-start if requested (with a small delay to ensure method is set)
       if (autoStart) {
         const timer = setTimeout(() => {
-          startTimer();
+          startTimer(true, blockingLevel);
         }, 100);
         return () => clearTimeout(timer);
       }
     }
-  }, [route.params]);
+  }, [route?.params, selectedMethod, startTimer, blockingLevel]);
+
+  // Initialize enhanced blocking service
+  useEffect(() => {
+    if (enhancedAppBlockingService) {
+      enhancedAppBlockingService.initialize();
+      enhancedAppBlockingService.updateBlockingSettings(blockingSettings);
+    }
+    
+    return () => {
+      if (enhancedAppBlockingService) {
+        enhancedAppBlockingService.cleanup();
+      }
+    };
+  }, [blockingSettings]);
 
   // Handle back navigation
   const handleBackPress = () => {
     if (isRunning || isPaused) {
-      // Maybe show a confirmation dialog here
-      stopTimer();
+      Alert.alert(
+        'Stop Study Session?',
+        'Are you sure you want to stop your current study session?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Stop', 
+            style: 'destructive',
+            onPress: () => {
+              stopTimer();
+              navigation?.goBack();
+            }
+          },
+        ]
+      );
+    } else {
+      navigation?.goBack();
     }
-    navigation.goBack();
   };
 
-  const renderMethodSelector = () => (
-    <View style={styles.methodSelector}>
-      {Object.entries(STUDY_METHODS).map(([key, method]) => (
-        <TouchableOpacity
-          key={key}
-          style={[
-            styles.methodButton,
-            selectedMethod === key && styles.methodButtonActive,
-          ]}
-          onPress={() => changeMethod(key)}
-          disabled={isRunning}
-        >
-          <Text
-            style={[
-              styles.methodText,
-              selectedMethod === key && styles.methodTextActive,
-            ]}
-          >
-            {method.name}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  // Handle method change
+  const handleMethodChange = (method) => {
+    if (!method || !STUDY_METHODS[method]) {
+      console.warn('Invalid method:', method);
+      return;
+    }
+    
+    if (isRunning || isPaused) {
+      Alert.alert(
+        'Timer Running',
+        'Please stop the current timer before changing study methods.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    setSelectedMethod(method);
+  };
 
-  const renderTimer = () => (
-    <View style={styles.timerContainer}>
-      {/* Circular Progress Indicator */}
-      <View style={styles.progressCircle}>
-        <View
-          style={[
-            styles.progressFill,
-            {
-              transform: [{ rotate: `${progress * 360}deg` }],
-            },
-          ]}
-        />
-        <View style={styles.timerDisplay}>
-          <Text style={styles.timerText}>{formattedTime}</Text>
-          <Text style={styles.methodLabel}>
-            {STUDY_METHODS[selectedMethod]?.name || 'Study Session'}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
+  // Handle blocking settings change
+  const handleBlockingSettingsChange = (newSettings) => {
+    if (newSettings && typeof newSettings === 'object') {
+      setBlockingSettings(newSettings);
+    }
+  };
+
+  // Handle music change
+  const handleMusicChange = (musicType) => {
+    console.log('Music changed to:', musicType);
+    // Handle music change logic here
+  };
+
+  const formatTime = (seconds) => {
+    if (typeof seconds !== 'number' || isNaN(seconds)) {
+      return '00:00';
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const progressPercentage = (progress || 0) * 100;
 
   const renderControls = () => (
     <View style={styles.controlsContainer}>
-      {!isRunning && !isPaused && (
-        <TouchableOpacity style={styles.startButton} onPress={() => startTimer(true)}>
-          <Text style={styles.startButtonText}>Start with Blocking</Text>
-        </TouchableOpacity>
-      )}
+      <View style={styles.mainControls}>
+        {!isRunning && !isPaused && (
+          <TouchableOpacity 
+            style={styles.startButton} 
+            onPress={() => startTimer(true, blockingLevel)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.startButtonText}>Start with Blocking</Text>
+          </TouchableOpacity>
+        )}
 
-      {isRunning && (
-        <TouchableOpacity style={styles.pauseButton} onPress={pauseTimer}>
-          <Text style={styles.controlButtonText}>Pause</Text>
-        </TouchableOpacity>
-      )}
+        {isRunning && (
+          <View style={styles.runningControls}>
+            <TouchableOpacity 
+              style={styles.pauseButton} 
+              onPress={pauseTimer}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.controlButtonText}>Pause</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.stopButton} 
+              onPress={stopTimer}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.controlButtonText}>Stop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-      {isPaused && (
-        <TouchableOpacity style={styles.resumeButton} onPress={() => startTimer(true)}>
-          <Text style={styles.controlButtonText}>Resume</Text>
-        </TouchableOpacity>
-      )}
+        {isPaused && (
+          <View style={styles.pausedControls}>
+            <TouchableOpacity 
+              style={styles.resumeButton} 
+              onPress={() => startTimer(true, blockingLevel)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.controlButtonText}>Resume</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.stopButton} 
+              onPress={stopTimer}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.controlButtonText}>Stop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
 
-      {(isRunning || isPaused) && (
-        <TouchableOpacity style={styles.stopButton} onPress={stopTimer}>
-          <Text style={styles.controlButtonText}>Stop</Text>
-        </TouchableOpacity>
-      )}
+      {/* Music Controls */}
+      <MusicControls 
+        studyMethod={selectedMethod}
+        onMusicChange={handleMusicChange}
+        disabled={isRunning}
+      />
+
+      {/* Blocking Settings Button */}
+      <TouchableOpacity 
+        style={styles.settingsButton}
+        onPress={() => setShowBlockingSettings(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.settingsButtonText}>⚙️ Blocking Settings</Text>
+      </TouchableOpacity>
 
       {/* Blocking status indicator */}
       {blockingEnabled && (
         <View style={styles.blockingStatus}>
           <Text style={styles.blockingStatusText}>🔒 App Blocking Active</Text>
+          <Text style={styles.blockingLevelText}>Level: {blockingLevel}</Text>
           {appSwitchAttempts > 0 && (
             <Text style={styles.attemptsText}>Attempts: {appSwitchAttempts}</Text>
           )}
@@ -151,17 +233,17 @@ export default function StudyScreen({ route, navigation }) {
     </TouchableOpacity>
   );
 
-  if (isCompleted) {
+  if (isPaused) {
     return (
       <View style={styles.container}>
-        <View style={styles.completedContainer}>
-          <Text style={styles.completedTitle}>Session Complete!</Text>
-          <Text style={styles.completedSubtitle}>
-            Great job on your {STUDY_METHODS[selectedMethod]?.name || 'Study'} session
+        <View style={styles.pausedContainer}>
+          <Text style={styles.pausedTitle}>Study Session Paused</Text>
+          <Text style={styles.pausedSubtitle}>
+            {STUDY_METHODS[selectedMethod]?.name || 'Study'} session is paused.
           </Text>
-          <View style={styles.completedButtons}>
-            <TouchableOpacity style={styles.startButton} onPress={stopTimer}>
-              <Text style={styles.startButtonText}>Start New Session</Text>
+          <View style={styles.pausedButtons}>
+            <TouchableOpacity style={styles.resumeButton} onPress={() => startTimer(true, blockingLevel)}>
+              <Text style={styles.resumeButtonText}>Resume</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.homeButton} onPress={handleBackPress}>
               <Text style={styles.homeButtonText}>Back to Home</Text>
@@ -174,19 +256,64 @@ export default function StudyScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      {renderBackButton()}
-      {renderMethodSelector()}
-      {renderTimer()}
-      {renderControls()}
-      
-      {/* Blocking Overlay */}
-      <BlockingOverlay
-        visible={showBlockingOverlay}
-        onReturnToStudy={handleReturnToStudy}
-        onDisableBlocking={handleDisableBlocking}
-        timeRemaining={formattedTime}
-        methodName={STUDY_METHODS[selectedMethod]?.name || 'Study'}
-      />
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Method Selector */}
+        <MethodSelector 
+          selectedMethod={selectedMethod}
+          onMethodChange={handleMethodChange}
+        />
+
+        {/* Timer Display */}
+        <View style={styles.timerContainer}>
+          <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+          <Text style={styles.methodText}>{STUDY_METHODS[selectedMethod]?.name || 'Study Session'}</Text>
+          <Text style={styles.phaseText}>{currentPhase}</Text>
+        </View>
+
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { width: `${progressPercentage}%` }
+              ]} 
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {Math.round(progressPercentage)}% Complete
+          </Text>
+        </View>
+
+        {/* Controls */}
+        {renderControls()}
+
+        {/* Blocking Overlay */}
+        <BlockingOverlay 
+          visible={showOverlay}
+          onContinue={handleContinue}
+          onDisable={handleDisableBlocking}
+          appSwitchAttempts={appSwitchAttempts}
+          blockingLevel={blockingLevel}
+        />
+
+        {/* Blocking Settings Modal */}
+        <BlockingSettings
+          visible={showBlockingSettings}
+          onClose={() => setShowBlockingSettings(false)}
+          blockingEnabled={blockingEnabled}
+          onToggleBlocking={handleToggleBlocking}
+          onShowFocusModeSuggestion={handleShowFocusModeSuggestion}
+          appSwitchAttempts={appSwitchAttempts}
+          blockingLevel={blockingLevel}
+          onBlockingLevelChange={handleBlockingLevelChange}
+          blockingSettings={blockingSettings}
+          onBlockingSettingsChange={handleBlockingSettingsChange}
+        />
+      </ScrollView>
     </View>
   );
 }
@@ -195,92 +322,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
+  },
+  scrollContent: {
+    flexGrow: 1,
     padding: 20,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 40,
-    marginBottom: 20,
-  },
-  backButtonText: {
-    color: '#4CAF50',
-    fontSize: 16,
-  },
-  methodSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  methodButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    marginHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: '#333',
-    alignItems: 'center',
-  },
-  methodButtonActive: {
-    backgroundColor: '#4CAF50',
-  },
-  methodText: {
-    color: '#999',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  methodTextActive: {
-    color: '#fff',
+    paddingBottom: 40,
   },
   timerContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
+    marginVertical: 30,
+    paddingHorizontal: 20,
   },
-  progressCircle: {
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: (width * 0.6) / 2,
-    backgroundColor: '#333',
-    justifyContent: 'center',
+  timerText: {
+    fontSize: 72,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  methodText: {
+    fontSize: 24,
+    color: '#4CAF50',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  phaseText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+  },
+  progressContainer: {
     alignItems: 'center',
-    position: 'relative',
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  progressBar: {
+    width: '100%',
+    height: 12,
+    backgroundColor: '#333',
+    borderRadius: 6,
+    marginBottom: 8,
     overflow: 'hidden',
   },
   progressFill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
     height: '100%',
     backgroundColor: '#4CAF50',
-    borderRadius: (width * 0.6) / 2,
-    opacity: 0.3,
+    borderRadius: 6,
   },
-  timerDisplay: {
-    alignItems: 'center',
-    zIndex: 1,
-  },
-  timerText: {
-    fontSize: 48,
-    fontWeight: 'bold',
+  progressText: {
     color: '#fff',
-    fontFamily: 'monospace',
-  },
-  methodLabel: {
     fontSize: 16,
-    color: '#999',
-    marginTop: 8,
+    fontWeight: '600',
   },
   controlsContainer: {
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
-    marginBottom: 40,
+    gap: 20,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  mainControls: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    width: '100%',
   },
   startButton: {
     backgroundColor: '#4CAF50',
@@ -290,6 +400,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
     maxWidth: '90%',
     alignItems: 'center',
+    alignSelf: 'center',
   },
   startButtonText: {
     color: '#fff',
@@ -297,13 +408,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  runningControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+    width: '100%',
+  },
+  pausedControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+    width: '100%',
+  },
   pauseButton: {
     backgroundColor: '#FF9800',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
     minWidth: 100,
-    maxWidth: '80%',
+    maxWidth: '45%',
     alignItems: 'center',
   },
   resumeButton: {
@@ -312,7 +439,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 20,
     minWidth: 100,
-    maxWidth: '80%',
+    maxWidth: '45%',
     alignItems: 'center',
   },
   stopButton: {
@@ -321,7 +448,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 20,
     minWidth: 100,
-    maxWidth: '80%',
+    maxWidth: '45%',
     alignItems: 'center',
   },
   controlButtonText: {
@@ -330,38 +457,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  completedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  completedTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-    marginBottom: 16,
-  },
-  completedSubtitle: {
-    fontSize: 18,
-    color: '#999',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  completedButtons: {
-    gap: 16,
-    alignItems: 'center',
-  },
-  homeButton: {
+  settingsButton: {
     backgroundColor: '#333',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 20,
-    minWidth: 120,
     alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 8,
+    minWidth: 150,
   },
-  homeButtonText: {
+  settingsButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   blockingStatus: {
@@ -375,6 +483,7 @@ const styles = StyleSheet.create({
     borderColor: '#4CAF50',
     width: '100%',
     maxWidth: 300,
+    alignSelf: 'center',
   },
   blockingStatusText: {
     color: '#4CAF50',
@@ -382,10 +491,68 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  blockingLevelText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 2,
+  },
   attemptsText: {
     color: '#FF9800',
     fontSize: 12,
     marginTop: 4,
     textAlign: 'center',
+  },
+  pausedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  pausedTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  pausedSubtitle: {
+    fontSize: 18,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  pausedButtons: {
+    gap: 16,
+    alignItems: 'center',
+  },
+  resumeButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  homeButton: {
+    backgroundColor: '#666',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  homeButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 40,
+    marginBottom: 20,
+  },
+  backButtonText: {
+    color: '#4CAF50',
+    fontSize: 16,
   },
 });
