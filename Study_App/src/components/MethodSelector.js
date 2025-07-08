@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
 } from 'react-native';
 import { STUDY_METHODS } from '../constants/studyMethods';
 
@@ -17,11 +16,7 @@ export default function MethodSelector({ selectedMethod, onMethodChange }) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Choose Study Method</Text>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <View style={styles.methodsContainer}>
         {Object.entries(STUDY_METHODS).map(([key, method]) => (
           <TouchableOpacity
             key={key}
@@ -30,6 +25,7 @@ export default function MethodSelector({ selectedMethod, onMethodChange }) {
               selectedMethod === key && styles.methodButtonActive,
             ]}
             onPress={() => onMethodChange(key)}
+            activeOpacity={0.8}
           >
             <Text style={[
               styles.methodName,
@@ -43,15 +39,9 @@ export default function MethodSelector({ selectedMethod, onMethodChange }) {
             ]}>
               {formatDuration(method.duration)}
             </Text>
-            <Text style={[
-              styles.methodDescription,
-              selectedMethod === key && styles.methodDescriptionActive,
-            ]}>
-              {method.description}
-            </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -64,28 +54,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 12,
+    marginBottom: 16,
     textAlign: 'center',
   },
-  scrollContent: {
+  methodsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     gap: 12,
   },
   methodButton: {
+    flex: 1,
     backgroundColor: '#333',
     padding: 16,
     borderRadius: 12,
-    minWidth: 140,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
+    minHeight: 80,
+    justifyContent: 'center',
   },
   methodButtonActive: {
     backgroundColor: '#4CAF50',
     borderColor: '#4CAF50',
   },
   methodName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 4,
@@ -95,20 +90,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   methodDuration: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#999999',
-    marginBottom: 4,
   },
   methodDurationActive: {
-    color: '#ffffff',
-  },
-  methodDescription: {
-    fontSize: 12,
-    color: '#666666',
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  methodDescriptionActive: {
     color: '#ffffff',
   },
 });

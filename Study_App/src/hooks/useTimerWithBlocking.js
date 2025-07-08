@@ -62,26 +62,24 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
 
   // Pause timer
   const pauseTimer = useCallback(() => {
-    console.log('Pausing timer...');
     setIsRunning(false);
     setIsPaused(true);
     setCurrentPhase('Paused');
-    
     // Stop app blocking when paused
     if (blockingEnabled) {
       enhancedAppBlockingService.stopBlocking();
     }
-    
-    // Clear the interval
+    // Always clear the interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    // Reset start time
+    startTimeRef.current = null;
   }, [blockingEnabled]);
 
   // Stop timer
   const stopTimer = useCallback(() => {
-    console.log('Stopping timer...');
     setIsRunning(false);
     setIsPaused(false);
     setTimeLeft(STUDY_METHODS[initialMethod].duration);
@@ -89,18 +87,15 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
     setCurrentPhase('Ready to start');
     setShowOverlay(false);
     setAppSwitchAttempts(0);
-    
     // Stop app blocking
     if (blockingEnabled) {
       enhancedAppBlockingService.stopBlocking();
     }
-    
-    // Clear the interval
+    // Always clear the interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    
     // Reset start time
     startTimeRef.current = null;
   }, [initialMethod, blockingEnabled]);

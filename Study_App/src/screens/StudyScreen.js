@@ -256,64 +256,59 @@ export default function StudyScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Method Selector */}
-        <MethodSelector 
-          selectedMethod={selectedMethod}
-          onMethodChange={handleMethodChange}
-        />
+      {/* Method Selector */}
+      <MethodSelector 
+        selectedMethod={selectedMethod}
+        onMethodChange={handleMethodChange}
+      />
 
-        {/* Timer Display */}
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
-          <Text style={styles.methodText}>{STUDY_METHODS[selectedMethod]?.name || 'Study Session'}</Text>
-          <Text style={styles.phaseText}>{currentPhase}</Text>
+      {/* Timer Display */}
+      <View style={styles.timerContainer}>
+        <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+        <Text style={styles.methodText}>{STUDY_METHODS[selectedMethod]?.name || 'Study Session'}</Text>
+        <Text style={styles.phaseText}>{currentPhase}</Text>
+      </View>
+
+      {/* Progress Bar */}
+      <View style={styles.progressContainer}>
+        <View style={styles.progressBar}>
+          <View 
+            style={[
+              styles.progressFill, 
+              { width: `${progressPercentage}%` }
+            ]} 
+          />
         </View>
+        <Text style={styles.progressText}>
+          {Math.round(progressPercentage)}% Complete
+        </Text>
+      </View>
 
-        {/* Progress Bar */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { width: `${progressPercentage}%` }
-              ]} 
-            />
-          </View>
-          <Text style={styles.progressText}>
-            {Math.round(progressPercentage)}% Complete
-          </Text>
-        </View>
+      {/* Controls */}
+      {renderControls()}
 
-        {/* Controls */}
-        {renderControls()}
+      {/* Blocking Overlay */}
+      <BlockingOverlay 
+        visible={showOverlay}
+        onContinue={handleContinue}
+        onDisable={handleDisableBlocking}
+        appSwitchAttempts={appSwitchAttempts}
+        blockingLevel={blockingLevel}
+      />
 
-        {/* Blocking Overlay */}
-        <BlockingOverlay 
-          visible={showOverlay}
-          onContinue={handleContinue}
-          onDisable={handleDisableBlocking}
-          appSwitchAttempts={appSwitchAttempts}
-          blockingLevel={blockingLevel}
-        />
-
-        {/* Blocking Settings Modal */}
-        <BlockingSettings
-          visible={showBlockingSettings}
-          onClose={() => setShowBlockingSettings(false)}
-          blockingEnabled={blockingEnabled}
-          onToggleBlocking={handleToggleBlocking}
-          onShowFocusModeSuggestion={handleShowFocusModeSuggestion}
-          appSwitchAttempts={appSwitchAttempts}
-          blockingLevel={blockingLevel}
-          onBlockingLevelChange={handleBlockingLevelChange}
-          blockingSettings={blockingSettings}
-          onBlockingSettingsChange={handleBlockingSettingsChange}
-        />
-      </ScrollView>
+      {/* Blocking Settings Modal */}
+      <BlockingSettings
+        visible={showBlockingSettings}
+        onClose={() => setShowBlockingSettings(false)}
+        blockingEnabled={blockingEnabled}
+        onToggleBlocking={handleToggleBlocking}
+        onShowFocusModeSuggestion={handleShowFocusModeSuggestion}
+        appSwitchAttempts={appSwitchAttempts}
+        blockingLevel={blockingLevel}
+        onBlockingLevelChange={handleBlockingLevelChange}
+        blockingSettings={blockingSettings}
+        onBlockingSettingsChange={handleBlockingSettingsChange}
+      />
     </View>
   );
 }
@@ -322,11 +317,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
-  },
-  scrollContent: {
-    flexGrow: 1,
     padding: 20,
-    paddingBottom: 40,
+    paddingTop: 40,
   },
   timerContainer: {
     alignItems: 'center',
@@ -384,6 +376,9 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
+    marginBottom: 40,
   },
   mainControls: {
     flexDirection: 'column',

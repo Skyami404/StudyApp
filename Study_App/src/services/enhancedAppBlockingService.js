@@ -17,6 +17,7 @@ class EnhancedAppBlockingService {
       allowEmergencyCalls: true,
       allowSystemApps: true,
     };
+    this.currentAppState = 'active';
   }
 
   // Initialize the service
@@ -32,6 +33,7 @@ class EnhancedAppBlockingService {
 
       // Set up app state listener
       this.appStateListener = AppState.addEventListener('change', this.handleAppStateChange.bind(this));
+      this.currentAppState = AppState.currentState || 'active';
       console.log('Enhanced app blocking service initialized');
     } catch (error) {
       console.error('Failed to initialize enhanced app blocking service:', error);
@@ -51,8 +53,8 @@ class EnhancedAppBlockingService {
       this.onBlockingStateChange(true);
     }
 
-    // Show blocking notification
-    this.showBlockingNotification();
+    // Don't show blocking notification when starting within the app
+    // Only show notifications when user switches away from the app
     
     // Enable screen time if requested
     if (this.blockingSettings.enableScreenTime && level === 'screen-time') {
@@ -91,6 +93,7 @@ class EnhancedAppBlockingService {
 
   // Handle app state changes
   handleAppStateChange(nextAppState) {
+    this.currentAppState = nextAppState;
     if (this.isBlockingEnabled && nextAppState === 'active') {
       // User returned to our app
       this.handleReturnToApp();
@@ -99,7 +102,7 @@ class EnhancedAppBlockingService {
         this.onAppSwitchAttempt();
       }
     } else if (this.isBlockingEnabled && nextAppState === 'background') {
-      // User switched away from our app
+      // User switched away from our app - only show notifications when leaving
       this.handleAppSwitch();
       
       // For screen-time mode, show stronger blocking
@@ -109,26 +112,35 @@ class EnhancedAppBlockingService {
     }
   }
 
+  // Guard: Only show notifications if app is not active
+  shouldShowNotification() {
+    return this.currentAppState !== 'active';
+  }
+
   // Handle when user returns to app
   handleReturnToApp() {
     // Clear any scheduled notifications
     this.clearScheduledNotifications();
-    console.log('User returned to app');
+    // Clear persistent notifications
+    this.clearBlockingNotification();
+    console.log('User returned to app - cleared notifications');
   }
 
   // Handle when user switches away from app
   handleAppSwitch() {
     console.log('User switched away from app - enhanced blocking active');
     
-    // Show blocking notification
-    this.showBlockingNotification();
-    
-    // Schedule repeated reminder notification
-    this.scheduleReminderNotification();
-    
-    // If in strict mode, show stronger warning
-    if (this.blockingLevel === 'strict') {
-      this.showStrictModeWarning();
+    // Only show blocking notification when user leaves the app
+    if (this.shouldShowNotification()) {
+      this.showBlockingNotification();
+      
+      // Schedule repeated reminder notification
+      this.scheduleReminderNotification();
+      
+      // If in strict mode, show stronger warning
+      if (this.blockingLevel === 'strict') {
+        this.showStrictModeWarning();
+      }
     }
   }
 
@@ -229,6 +241,7 @@ class EnhancedAppBlockingService {
 
   // Show blocking notification (enhanced)
   async showBlockingNotification() {
+    if (!this.shouldShowNotification()) return;
     try {
       console.log('Attempting to show enhanced blocking notification');
       const content = {
@@ -257,6 +270,7 @@ class EnhancedAppBlockingService {
 
   // Schedule repeated reminder notification (enhanced)
   async scheduleReminderNotification() {
+    if (!this.shouldShowNotification()) return;
     try {
       console.log('Scheduling enhanced reminder notification');
       const content = {
@@ -360,68 +374,19 @@ class EnhancedAppBlockingService {
   handleScreenTimeBlocking() {
     console.log('Screen time blocking active - preventing app switching');
     
-    // Show persistent notification
-    this.showPersistentNotification();
+    // Only show notifications when user is not in the app
+    // The notifications will be shown when handleAppSwitch is called
     
-    // Schedule immediate return notification
-    setTimeout(() => {
-      this.showReturnNotification();
-    }, 2000);
-    
-    // Schedule repeated blocking notifications
+    // Schedule repeated blocking notifications for when user is away
     this.scheduleBlockingNotifications();
-  }
-
-  // Show persistent blocking notification
-  async showPersistentNotification() {
-    try {
-      const content = {
-        title: '🔒 Focus Mode Active',
-        body: 'Return to Study App to continue your session',
-        data: { type: 'focus_blocking', level: 'screen-time' },
-        sticky: true,
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-      };
-      
-      if (Platform.OS === 'android') {
-        content.ongoing = true;
-        content.autoDismiss = false;
-      }
-      
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content,
-        trigger: null,
-      });
-      
-      console.log('Persistent blocking notification shown:', notificationId);
-    } catch (error) {
-      console.error('Failed to show persistent notification:', error);
-    }
-  }
-
-  // Show return notification
-  async showReturnNotification() {
-    try {
-      const content = {
-        title: '⏰ Study Session Active',
-        body: 'Your timer is still running. Please return to the Study App.',
-        data: { type: 'return_reminder', level: 'screen-time' },
-      };
-      
-      await Notifications.scheduleNotificationAsync({
-        content,
-        trigger: null,
-      });
-    } catch (error) {
-      console.error('Failed to show return notification:', error);
-    }
   }
 
   // Schedule blocking notifications
   scheduleBlockingNotifications() {
+    if (!this.shouldShowNotification()) return;
     // Schedule notifications every 30 seconds for screen-time mode
     const interval = setInterval(async () => {
-      if (!this.isBlockingEnabled) {
+      if (!this.isBlockingEnabled || !this.shouldShowNotification()) {
         clearInterval(interval);
         return;
       }
