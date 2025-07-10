@@ -1,19 +1,60 @@
 import { Platform, Alert } from 'react-native';
 import * as Linking from 'expo-linking';
+import { Audio } from 'expo-av';
 
 class MusicService {
   constructor() {
     this.currentTrack = null;
     this.isPlaying = false;
     this.volume = 0.5;
+    this.sound = null;
     this.ambientSounds = {
-      rain: { name: 'Rain', icon: '🌧️', duration: 'continuous' },
-      whiteNoise: { name: 'White Noise', icon: '🔊', duration: 'continuous' },
-      forest: { name: 'Forest', icon: '🌲', duration: 'continuous' },
-      ocean: { name: 'Ocean Waves', icon: '🌊', duration: 'continuous' },
-      cafe: { name: 'Cafe Ambience', icon: '☕', duration: 'continuous' },
-      fireplace: { name: 'Fireplace', icon: '🔥', duration: 'continuous' },
+      rain: { 
+        name: 'Rain', 
+        icon: '🌧️', 
+        duration: 'continuous'
+      },
+      whiteNoise: { 
+        name: 'White Noise', 
+        icon: '🔊', 
+        duration: 'continuous'
+      },
+      forest: { 
+        name: 'Forest', 
+        icon: '🌲', 
+        duration: 'continuous'
+      },
+      ocean: { 
+        name: 'Ocean Waves', 
+        icon: '🌊', 
+        duration: 'continuous'
+      },
+      cafe: { 
+        name: 'Cafe Ambience', 
+        icon: '☕', 
+        duration: 'continuous'
+      },
+      fireplace: { 
+        name: 'Fireplace', 
+        icon: '🔥', 
+        duration: 'continuous'
+      },
     };
+  }
+
+  // Initialize audio
+  async initialize() {
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+    } catch (error) {
+      console.error('Failed to initialize audio:', error);
+    }
   }
 
   // Check if Spotify is installed
@@ -93,15 +134,28 @@ class MusicService {
     return this.ambientSounds;
   }
 
-  // Play ambient sound (placeholder - would need audio library)
+  // Play ambient sound (placeholder implementation)
   async playAmbientSound(soundType) {
     try {
+      // Stop any currently playing sound
+      await this.stopAmbientSound();
+      
+      const soundConfig = this.ambientSounds[soundType];
+      if (!soundConfig) {
+        throw new Error(`Unknown sound type: ${soundType}`);
+      }
+
       console.log(`Playing ambient sound: ${soundType}`);
-      // This would integrate with expo-av or react-native-sound
-      // For now, just return success
+      
+      // For now, this is a placeholder since we don't have actual audio files
+      // In a real implementation, you would load and play actual audio files
+      this.isPlaying = true;
+      this.currentTrack = { type: 'ambient', sound: soundType };
+      
+      console.log(`Ambient sound ${soundType} started playing (placeholder)`);
       return { success: true, sound: soundType };
     } catch (error) {
-      console.log('Error playing ambient sound:', error);
+      console.error('Error playing ambient sound:', error);
       return { success: false, error: error.message };
     }
   }
@@ -109,12 +163,20 @@ class MusicService {
   // Stop ambient sound
   async stopAmbientSound() {
     try {
-      console.log('Stopping ambient sound');
-      // This would stop the audio
+      if (this.sound) {
+        await this.sound.stopAsync();
+        await this.sound.unloadAsync();
+        this.sound = null;
+      }
+      this.isPlaying = false;
+      this.currentTrack = null;
+      console.log('Ambient sound stopped');
       return { success: true };
     } catch (error) {
-      console.log('Error stopping ambient sound:', error);
-      return { success: false, error: error.message };
+      console.error('Error stopping ambient sound:', error);
+      this.isPlaying = false;
+      this.currentTrack = null;
+      return { success: true };
     }
   }
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { enhancedAppBlockingService } from '../services/enhancedAppBlockingService';
 import { STUDY_METHODS } from '../constants/studyMethods';
+import useStats from './useStats';
 
 export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
   const [timeLeft, setTimeLeft] = useState(STUDY_METHODS[initialMethod].duration);
@@ -16,6 +17,18 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
   
   const intervalRef = useRef(null);
   const startTimeRef = useRef(null);
+  
+  // Get stats hook for tracking sessions
+  const { addSession } = useStats();
+
+  // Update timer when method changes
+  useEffect(() => {
+    if (!isRunning && !isPaused) {
+      setTimeLeft(STUDY_METHODS[initialMethod].duration);
+      setProgress(0);
+      setCurrentPhase('Ready to start');
+    }
+  }, [initialMethod, isRunning, isPaused]);
 
   // Initialize enhanced app blocking service
   useEffect(() => {
@@ -39,15 +52,19 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
 
   // Start timer with blocking
   const startTimer = useCallback((enableBlocking = true, level = 'standard') => {
+    console.log('Start timer called with:', { enableBlocking, level, isRunning, isPaused });
+    
     if (!isRunning && !isPaused) {
       // Starting fresh session
       startTimeRef.current = Date.now();
       setCurrentPhase('Focus Time');
+      console.log('Starting fresh timer session');
     } else if (isPaused) {
       // Resuming from pause
       const elapsed = STUDY_METHODS[initialMethod].duration - timeLeft;
       startTimeRef.current = Date.now() - (elapsed * 1000);
       setCurrentPhase('Focus Time');
+      console.log('Resuming paused timer');
     }
     
     setIsRunning(true);
@@ -57,11 +74,15 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
     // Start enhanced app blocking if enabled
     if (enableBlocking) {
       enhancedAppBlockingService.startBlocking(handleBlockingStateChange, handleAppSwitchAttempt, level);
+      console.log('App blocking started');
     }
+    
+    console.log('Timer started successfully');
   }, [isRunning, isPaused, initialMethod, timeLeft, handleBlockingStateChange, handleAppSwitchAttempt]);
 
   // Pause timer
   const pauseTimer = useCallback(() => {
+    console.log('Pause button pressed - pausing timer');
     setIsRunning(false);
     setIsPaused(true);
     setCurrentPhase('Paused');
@@ -73,13 +94,15 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
+      console.log('Timer interval cleared');
     }
-    // Reset start time
-    startTimeRef.current = null;
+    // Do NOT reset startTimeRef.current here!
+    console.log('Timer paused successfully');
   }, [blockingEnabled]);
 
   // Stop timer
   const stopTimer = useCallback(() => {
+    console.log('Stop button pressed - stopping timer');
     setIsRunning(false);
     setIsPaused(false);
     setTimeLeft(STUDY_METHODS[initialMethod].duration);
@@ -95,9 +118,11 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
+      console.log('Timer interval cleared');
     }
     // Reset start time
     startTimeRef.current = null;
+    console.log('Timer stopped successfully');
   }, [initialMethod, blockingEnabled]);
 
   // Handle continue from overlay
@@ -149,7 +174,10 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
 
   // Timer countdown effect
   useEffect(() => {
+    console.log('Timer effect running:', { isRunning, timeLeft, selectedMethod: initialMethod });
+    
     if (isRunning && timeLeft > 0) {
+      console.log('Setting up timer interval');
       intervalRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
         const remaining = STUDY_METHODS[initialMethod].duration - elapsed;
@@ -173,6 +201,12 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
             `Great job completing your ${STUDY_METHODS[initialMethod].name} session!`,
             [{ text: 'OK' }]
           );
+          
+          // Add session to stats
+          const durationInMinutes = Math.floor(STUDY_METHODS[initialMethod].duration / 60);
+          addSession(durationInMinutes, initialMethod);
+          
+          console.log('Timer completed');
         } else {
           setTimeLeft(remaining);
           setProgress(1 - (remaining / STUDY_METHODS[initialMethod].duration));
@@ -180,6 +214,7 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
       }, 1000);
     } else {
       if (intervalRef.current) {
+        console.log('Clearing timer interval');
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
@@ -187,11 +222,12 @@ export const useTimerWithBlocking = (initialMethod = 'pomodoro') => {
 
     return () => {
       if (intervalRef.current) {
+        console.log('Cleanup: clearing timer interval');
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [isRunning, initialMethod, blockingEnabled]);
+  }, [isRunning, initialMethod, blockingEnabled, addSession]);
 
   // Keep timer running when component unmounts/remounts
   useEffect(() => {

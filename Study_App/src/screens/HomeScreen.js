@@ -29,6 +29,9 @@ export default function HomeScreen() {
   const [nextSuggestedTime, setNextSuggestedTime] = useState(null);
   const [userName, setUserName] = useState('');
 
+  // Calculate today's session count
+  const todaysSessionCount = Array.isArray(todaysSessions) ? todaysSessions.length : 0;
+
   // Set greeting based on time of day
   // useEffect(() => {
   //   const hour = new Date().getHours();
@@ -204,7 +207,7 @@ export default function HomeScreen() {
           <View style={styles.progressCard}>
             <View style={styles.progressStats}>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{todaysSessions}</Text>
+                <Text style={styles.statNumber}>{todaysSessionCount}</Text>
                 <Text style={styles.statLabel}>Sessions</Text>
               </View>
               <View style={styles.statDivider} />

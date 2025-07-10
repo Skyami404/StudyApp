@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTimerWithBlocking } from '../hooks/useTimerWithBlocking';
 import { STUDY_METHODS } from '../constants/studyMethods';
 import MethodSelector from '../components/MethodSelector';
@@ -57,15 +58,15 @@ export default function StudyScreen({ route, navigation }) {
         setSelectedMethod(method);
       }
       
-      // Auto-start if requested (with a small delay to ensure method is set)
-      if (autoStart) {
+      // Auto-start if requested (only once when component mounts)
+      if (autoStart && !isRunning && !isPaused) {
         const timer = setTimeout(() => {
           startTimer(true, blockingLevel);
         }, 100);
         return () => clearTimeout(timer);
       }
     }
-  }, [route?.params, selectedMethod, startTimer, blockingLevel]);
+  }, [route?.params?.autoStart, route?.params?.method]); // Only depend on route params, not functions
 
   // Initialize enhanced blocking service
   useEffect(() => {
@@ -103,6 +104,30 @@ export default function StudyScreen({ route, navigation }) {
       navigation?.goBack();
     }
   };
+
+  // Set up navigation focus effect to handle back navigation
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (isRunning || isPaused) {
+          handleBackPress();
+          return true; // Prevent default back behavior
+        }
+        return false; // Allow default back behavior
+      };
+
+      // Add back handler
+      const backHandler = navigation.addListener('beforeRemove', (e) => {
+        if (isRunning || isPaused) {
+          // Prevent default action
+          e.preventDefault();
+          handleBackPress();
+        }
+      });
+
+      return backHandler;
+    }, [isRunning, isPaused])
+  );
 
   // Handle method change
   const handleMethodChange = (method) => {
@@ -205,15 +230,6 @@ export default function StudyScreen({ route, navigation }) {
         disabled={isRunning}
       />
 
-      {/* Blocking Settings Button */}
-      <TouchableOpacity 
-        style={styles.settingsButton}
-        onPress={() => setShowBlockingSettings(true)}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.settingsButtonText}>⚙️ Blocking Settings</Text>
-      </TouchableOpacity>
-
       {/* Blocking status indicator */}
       {blockingEnabled && (
         <View style={styles.blockingStatus}>
@@ -233,29 +249,21 @@ export default function StudyScreen({ route, navigation }) {
     </TouchableOpacity>
   );
 
-  if (isPaused) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.pausedContainer}>
-          <Text style={styles.pausedTitle}>Study Session Paused</Text>
-          <Text style={styles.pausedSubtitle}>
-            {STUDY_METHODS[selectedMethod]?.name || 'Study'} session is paused.
-          </Text>
-          <View style={styles.pausedButtons}>
-            <TouchableOpacity style={styles.resumeButton} onPress={() => startTimer(true, blockingLevel)}>
-              <Text style={styles.resumeButtonText}>Resume</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.homeButton} onPress={handleBackPress}>
-              <Text style={styles.homeButtonText}>Back to Home</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
+      {/* Header with Settings Button */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.headerSettingsButton}
+          onPress={() => setShowBlockingSettings(true)}
+        >
+          <Text style={styles.headerSettingsButtonText}>⚙️</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Method Selector */}
       <MethodSelector 
         selectedMethod={selectedMethod}
@@ -319,6 +327,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     padding: 20,
     paddingTop: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  backButtonText: {
+    color: '#4CAF50',
+    fontSize: 16,
+  },
+  headerSettingsButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  headerSettingsButtonText: {
+    color: '#4CAF50',
+    fontSize: 24,
   },
   timerContainer: {
     alignItems: 'center',
@@ -452,21 +482,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  settingsButton: {
-    backgroundColor: '#333',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginTop: 8,
-    minWidth: 150,
-  },
-  settingsButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   blockingStatus: {
     marginTop: 16,
     alignItems: 'center',
@@ -538,16 +553,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 40,
-    marginBottom: 20,
-  },
-  backButtonText: {
-    color: '#4CAF50',
-    fontSize: 16,
   },
 });
