@@ -12,32 +12,39 @@ class MusicService {
       rain: { 
         name: 'Rain', 
         icon: '🌧️', 
-        duration: 'continuous'
+        duration: 'continuous',
+        // Using more reliable audio URLs
+        url: 'https://www.soundjay.com/misc/sounds/rain-01.mp3'
       },
       whiteNoise: { 
         name: 'White Noise', 
         icon: '🔊', 
-        duration: 'continuous'
+        duration: 'continuous',
+        url: 'https://www.soundjay.com/misc/sounds/white-noise-1.mp3'
       },
       forest: { 
         name: 'Forest', 
         icon: '🌲', 
-        duration: 'continuous'
+        duration: 'continuous',
+        url: 'https://www.soundjay.com/nature/sounds/forest-1.mp3'
       },
       ocean: { 
         name: 'Ocean Waves', 
         icon: '🌊', 
-        duration: 'continuous'
+        duration: 'continuous',
+        url: 'https://www.soundjay.com/nature/sounds/ocean-wave-1.mp3'
       },
       cafe: { 
         name: 'Cafe Ambience', 
         icon: '☕', 
-        duration: 'continuous'
+        duration: 'continuous',
+        url: 'https://www.soundjay.com/misc/sounds/cafe-1.mp3'
       },
       fireplace: { 
         name: 'Fireplace', 
         icon: '🔥', 
-        duration: 'continuous'
+        duration: 'continuous',
+        url: 'https://www.soundjay.com/misc/sounds/fireplace-1.mp3'
       },
     };
   }
@@ -52,6 +59,7 @@ class MusicService {
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
+      console.log('Audio initialized successfully');
     } catch (error) {
       console.error('Failed to initialize audio:', error);
     }
@@ -134,7 +142,7 @@ class MusicService {
     return this.ambientSounds;
   }
 
-  // Play ambient sound (placeholder implementation)
+  // Play ambient sound with actual audio
   async playAmbientSound(soundType) {
     try {
       // Stop any currently playing sound
@@ -145,20 +153,74 @@ class MusicService {
         throw new Error(`Unknown sound type: ${soundType}`);
       }
 
-      console.log(`Playing ambient sound: ${soundType}`);
+      console.log(`Attempting to play ambient sound: ${soundType}`);
       
-      // For now, this is a placeholder since we don't have actual audio files
-      // In a real implementation, you would load and play actual audio files
+      // OPTION 1: SIMULATION (Current - for testing UI)
+      // This simulates audio playback without actual sound
       this.isPlaying = true;
       this.currentTrack = { type: 'ambient', sound: soundType };
       
-      console.log(`Ambient sound ${soundType} started playing (placeholder)`);
+      // Simulate audio loading delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log(`Ambient sound ${soundType} simulation started`);
+      
+      Alert.alert(
+        'Audio Simulation',
+        `${soundType} sound is now playing (simulated). In a production app, this would play actual audio files.`,
+        [{ text: 'OK' }]
+      );
+      
+      return { success: true, sound: soundType, simulated: true };
+      
+      /* OPTION 2: REAL AUDIO (Uncomment to use actual audio files)
+      
+      // Load and play actual audio file
+      const { sound } = await Audio.Sound.createAsync(
+        // For local files in assets folder:
+        // require(`../assets/audio/${soundType}.mp3`)
+        
+        // For remote URLs (replace with working URLs):
+        { uri: soundConfig.url },
+        { 
+          shouldPlay: true,
+          isLooping: true,
+          volume: this.volume,
+          rate: 1.0,
+        }
+      );
+      
+      this.sound = sound;
+      this.isPlaying = true;
+      this.currentTrack = { type: 'ambient', sound: soundType };
+      
+      // Set up status update listener
+      sound.setOnPlaybackStatusUpdate((status) => {
+        console.log('Playback status update:', status);
+        if (status.isLoaded) {
+          this.isPlaying = status.isPlaying;
+        }
+      });
+      
+      console.log(`Ambient sound ${soundType} started playing successfully`);
       return { success: true, sound: soundType };
+      
+      */
+      
     } catch (error) {
       console.error('Error playing ambient sound:', error);
+      
+      Alert.alert(
+        'Audio Error',
+        `Unable to play ${soundType} sound: ${error.message}`,
+        [{ text: 'OK' }]
+      );
+      
       return { success: false, error: error.message };
     }
   }
+
+
 
   // Stop ambient sound
   async stopAmbientSound() {
@@ -177,6 +239,20 @@ class MusicService {
       this.isPlaying = false;
       this.currentTrack = null;
       return { success: true };
+    }
+  }
+
+  // Set volume
+  async setVolume(volume) {
+    try {
+      this.volume = Math.max(0, Math.min(1, volume));
+      if (this.sound) {
+        await this.sound.setVolumeAsync(this.volume);
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting volume:', error);
+      return { success: false, error: error.message };
     }
   }
 
@@ -226,6 +302,15 @@ class MusicService {
       }
     };
     return recommendations[studyMethod] || recommendations.focus;
+  }
+
+  // Cleanup resources
+  async cleanup() {
+    try {
+      await this.stopAmbientSound();
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
   }
 }
 

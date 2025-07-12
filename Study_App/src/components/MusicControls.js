@@ -8,6 +8,7 @@ import {
   FlatList,
   Alert,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import musicService from '../services/musicService';
@@ -21,7 +22,14 @@ export default function MusicControls({ studyMethod, onMusicChange, disabled = f
   const [studyPlaylists] = useState(musicService.getStudyPlaylists());
 
   useEffect(() => {
+    // Initialize music service
+    musicService.initialize();
     checkMusicServices();
+    
+    // Cleanup on unmount
+    return () => {
+      musicService.cleanup();
+    };
   }, []);
 
   const checkMusicServices = async () => {
@@ -36,18 +44,25 @@ export default function MusicControls({ studyMethod, onMusicChange, disabled = f
   };
 
   const handleAmbientSound = async (soundType) => {
+    console.log('handleAmbientSound called with:', soundType);
+    
     try {
       const result = await musicService.playAmbientSound(soundType);
+      console.log('Music service result:', result);
+      
       if (result.success) {
         setCurrentMusic({ type: 'ambient', sound: soundType });
         onMusicChange && onMusicChange({ type: 'ambient', sound: soundType });
         setShowMusicModal(false);
+        
+        // The music service now shows its own alert, so we don't need to show another one
+        console.log('Music selection successful');
       } else {
-        Alert.alert('Error', 'Failed to play ambient sound');
+        Alert.alert('Error', `Failed to play ${soundType} sound: ${result.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.log('Error playing ambient sound:', error);
-      Alert.alert('Error', 'Failed to play ambient sound');
+      Alert.alert('Error', `Failed to play ${soundType} sound: ${error.message}`);
     }
   };
 
@@ -101,41 +116,7 @@ export default function MusicControls({ studyMethod, onMusicChange, disabled = f
     setShowMusicModal(true);
   };
 
-  const renderAmbientSound = ({ item }) => (
-    <TouchableOpacity
-      style={styles.ambientItem}
-      onPress={() => handleAmbientSound(item[0])}
-    >
-      <Text style={styles.ambientIcon}>{item[1].icon}</Text>
-      <Text style={styles.ambientName}>{item[1].name}</Text>
-    </TouchableOpacity>
-  );
 
-  const renderSpotifyPlaylist = ({ item }) => (
-    <TouchableOpacity
-      style={styles.playlistItem}
-      onPress={() => handleSpotifyPlaylist(item)}
-    >
-      <View style={styles.playlistInfo}>
-        <Text style={styles.playlistName}>{item.name}</Text>
-        <Text style={styles.playlistDescription}>{item.description}</Text>
-      </View>
-      <Ionicons name="logo-spotify" size={24} color="#1DB954" />
-    </TouchableOpacity>
-  );
-
-  const renderAppleMusicPlaylist = ({ item }) => (
-    <TouchableOpacity
-      style={styles.playlistItem}
-      onPress={() => handleAppleMusicPlaylist(item)}
-    >
-      <View style={styles.playlistInfo}>
-        <Text style={styles.playlistName}>{item.name}</Text>
-        <Text style={styles.playlistDescription}>{item.description}</Text>
-      </View>
-      <Ionicons name="musical-notes" size={24} color="#FA2C55" />
-    </TouchableOpacity>
-  );
 
   return (
     <View style={styles.container}>
@@ -196,47 +177,83 @@ export default function MusicControls({ studyMethod, onMusicChange, disabled = f
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={Object.entries(ambientSounds)}
-              renderItem={renderAmbientSound}
-              keyExtractor={(item) => item[0]}
-              style={styles.ambientList}
-              ListHeaderComponent={
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {/* Ambient Sounds Section */}
+              <View style={styles.sectionContainer}>
                 <Text style={styles.sectionTitle}>🌿 Ambient Sounds</Text>
-              }
-            />
-
-            {spotifyAvailable && (
-              <View style={styles.serviceSection}>
-                <Text style={styles.sectionTitle}>🎵 Spotify Playlists</Text>
-                <FlatList
-                  data={studyPlaylists.spotify}
-                  renderItem={renderSpotifyPlaylist}
-                  keyExtractor={(item) => item.id}
-                  style={styles.playlistList}
-                />
+                <View style={styles.ambientGrid}>
+                  {Object.entries(ambientSounds).map(([key, sound]) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={styles.ambientItem}
+                      onPress={() => handleAmbientSound(key)}
+                      activeOpacity={0.5}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={styles.ambientIcon}>{sound.icon}</Text>
+                      <Text style={styles.ambientName}>{sound.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            )}
 
-            {appleMusicAvailable && (
-              <View style={styles.serviceSection}>
-                <Text style={styles.sectionTitle}>🎵 Apple Music Playlists</Text>
-                <FlatList
-                  data={studyPlaylists.appleMusic}
-                  renderItem={renderAppleMusicPlaylist}
-                  keyExtractor={(item) => item.id}
-                  style={styles.playlistList}
-                />
-              </View>
-            )}
+              {/* Spotify Section */}
+              {spotifyAvailable && (
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.sectionTitle}>🎵 Spotify Playlists</Text>
+                  <View style={styles.playlistContainer}>
+                    {studyPlaylists.spotify.map((playlist) => (
+                      <TouchableOpacity
+                        key={playlist.id}
+                        style={styles.playlistItem}
+                        onPress={() => handleSpotifyPlaylist(playlist)}
+                        activeOpacity={0.5}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.playlistInfo}>
+                          <Text style={styles.playlistName}>{playlist.name}</Text>
+                          <Text style={styles.playlistDescription}>{playlist.description}</Text>
+                        </View>
+                        <Ionicons name="logo-spotify" size={24} color="#1DB954" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
 
-            {!spotifyAvailable && !appleMusicAvailable && (
-              <View style={styles.noServiceContainer}>
-                <Text style={styles.noServiceText}>
-                  Install Spotify or Apple Music for playlist integration
-                </Text>
-              </View>
-            )}
+              {/* Apple Music Section */}
+              {appleMusicAvailable && (
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.sectionTitle}>🎵 Apple Music Playlists</Text>
+                  <View style={styles.playlistContainer}>
+                    {studyPlaylists.appleMusic.map((playlist) => (
+                      <TouchableOpacity
+                        key={playlist.id}
+                        style={styles.playlistItem}
+                        onPress={() => handleAppleMusicPlaylist(playlist)}
+                        activeOpacity={0.5}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.playlistInfo}>
+                          <Text style={styles.playlistName}>{playlist.name}</Text>
+                          <Text style={styles.playlistDescription}>{playlist.description}</Text>
+                        </View>
+                        <Ionicons name="musical-notes" size={24} color="#FA2C55" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* No Services Available */}
+              {!spotifyAvailable && !appleMusicAvailable && (
+                <View style={styles.noServiceContainer}>
+                  <Text style={styles.noServiceText}>
+                    Install Spotify or Apple Music for playlist integration
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -335,58 +352,71 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  ambientList: {
-    maxHeight: 200,
+  modalContent: {
+    padding: 20,
+  },
+  sectionContainer: {
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginVertical: 16,
-    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  ambientGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    gap: 10,
   },
   ambientItem: {
-    flexDirection: 'row',
+    width: '45%', // Make items larger and easier to tap
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#333',
+    minHeight: 80, // Ensure minimum touchable area
   },
   ambientIcon: {
     fontSize: 24,
-    marginRight: 12,
+    marginBottom: 5,
+    color: '#4A90E2',
   },
   ambientName: {
-    fontSize: 16,
+    fontSize: 12,
     color: '#ffffff',
+    textAlign: 'center',
   },
-  serviceSection: {
-    marginTop: 20,
-  },
-  playlistList: {
-    maxHeight: 150,
+  playlistContainer: {
+    maxHeight: 150, // Limit height for scrollable list
   },
   playlistItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#333',
+    marginBottom: 10,
   },
   playlistInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 10,
   },
   playlistName: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#ffffff',
     fontWeight: '600',
   },
   playlistDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#999999',
     marginTop: 2,
   },
